@@ -11,6 +11,10 @@ A two-team review game for Intermediate Algebra Unit 3 (Systems of Equations), m
 5. To aim, use the angle and power sliders, the arrow keys, or drag on the battlefield. Press Space or click FIRE.
 6. Destroy all four enemy buildings (Command HQ, Radar, Bunker, Fuel Depot) to win.
 
+## Name spinner
+
+Each team has a spinner wheel for picking who answers. Type student names (one per line) on the setup screen, or in the spinner itself. Open it with **Spin for who answers** on the question card or **Spin names** on a team panel. By default no name repeats until everyone on the team has been picked. Names are saved only in your browser.
+
 Three correct answers in a row earns a bigger "Bunker Buster" missile. Watch the wind!
 
 ## Question types
