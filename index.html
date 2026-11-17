@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Systems Strike</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Chakra+Petch:wght@400;500;600;700&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: night-ops command console. HUD strip on top, 16:9 battlefield below, a paper "briefing card" floats over it for each question. Single dark look by design. */
+:root{
+  --night:#0a0f12; --panel:#111a1f; --panel-2:#172229; --line:#2a3b45; --text:#e3ebe5; --muted:#8c9e97;
+  --amber:#f2b33d; --amber-ink:#271a03;
+  --paper:#eef0e5; --paper-2:#e2e6d7; --ink:#1b231f; --ink-soft:#56625b; --grid:#d2d8c8; --axis:#6f7a72;
+  --good:#2fa86d; --bad:#d9463e;
+  --red:#e2483f; --blue:#3a95f0;
+  --display:"Black Ops One","Impact","Arial Black",system-ui,sans-serif;
+  --ui:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --math:"STIX Two Text","Cambria Math","Times New Roman",serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--night);color:var(--text);font-family:var(--ui);overflow:hidden;font-size:15px}
+button{font-family:var(--ui);cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+.app{height:100%;display:flex;flex-direction:column;gap:10px;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* HUD */
+.hud{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:stretch}
+.team{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 12px;display:grid;gap:6px;min-width:0;position:relative;transition:box-shadow .3s,border-color .3s}
+.team.turn{border-color:var(--tc);box-shadow:0 0 0 1px var(--tc),0 0 18px -4px var(--tc)}
+.team .row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.tname{font-family:var(--display);font-size:clamp(16px,1.8vw,24px);letter-spacing:.04em;color:var(--tc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.tpct{font-variant-numeric:tabular-nums;font-weight:700;font-size:clamp(15px,1.5vw,20px)}
+.bar{height:10px;background:#0b1216;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--tc),color-mix(in srgb,var(--tc) 60%,#fff));transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.tmeta{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.pips{display:flex;gap:4px;flex-wrap:wrap}
+.pip{font-size:11px;letter-spacing:.06em;padding:1px 5px;border:1px solid var(--line);border-radius:3px;color:var(--text)}
+.pip.dead{color:#5a6a66;text-decoration:line-through;border-style:dashed}
+.streak{color:var(--amber);font-weight:600}
+#team1 .row,#team1 .tmeta{flex-direction:row-reverse}
+.mid{display:grid;gap:6px;justify-items:center;align-content:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 14px;min-width:220px}
+.qn{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.qn b{color:var(--text);font-size:15px}
+.wind{display:flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums;font-weight:600}
+.wind svg{width:42px;height:16px}
+.tools{display:flex;gap:6px}
+.tbtn{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:3px 8px;font-size:12px}
+.tbtn:hover{border-color:var(--muted)}
+
+/* Battlefield */
+.stagewrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.stage{position:relative;max-width:100%}
+.stagewrap{overflow:hidden}
+canvas{display:block;width:100%;height:100%;border-radius:6px;border:1px solid var(--line);touch-action:none}
+.banner{position:absolute;left:50%;top:5%;transform:translateX(-50%);text-align:center;pointer-events:none;width:90%}
+.banner h2{font-family:var(--display);font-weight:400;font-size:clamp(20px,3.4vw,48px);letter-spacing:.05em;color:var(--tc,var(--amber));text-shadow:0 2px 0 #000,0 0 24px rgba(0,0,0,.8);margin:0;text-wrap:balance}
+.banner p{margin:.3em 0 0;font-size:clamp(13px,1.4vw,18px);color:var(--text);text-shadow:0 1px 3px #000}
+.banner.pop h2{animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+
+.aimbar{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center;
+  background:rgba(10,16,20,.86);border:1px solid var(--line);border-radius:8px;padding:10px 14px;backdrop-filter:blur(4px);width:max-content;max-width:calc(100% - 24px)}
+.dial{display:grid;gap:2px;min-width:150px}
+.dial label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between}
+.dial label b{color:var(--text);font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:0}
+input[type=range]{width:100%;accent-color:var(--amber)}
+.fire{font-family:var(--display);font-size:22px;letter-spacing:.08em;background:var(--bad);color:#fff;border:0;border-radius:6px;padding:10px 22px;box-shadow:0 4px 0 #7d1f1a,0 0 20px -2px rgba(217,70,62,.7)}
+.fire:active{transform:translateY(3px);box-shadow:0 1px 0 #7d1f1a}
+.next{font-family:var(--display);font-size:20px;letter-spacing:.06em;background:var(--amber);color:var(--amber-ink);border:0;border-radius:6px;padding:10px 22px}
+.hint{font-size:12px;color:var(--muted);max-width:220px}
+.warhead{font-size:12px;font-weight:700;color:var(--amber);letter-spacing:.08em;text-transform:uppercase}
+
+/* Overlays */
+.overlay{position:fixed;inset:0;display:grid;place-items:center;overflow:auto;z-index:20;background:rgba(4,7,9,.58);backdrop-filter:blur(2px);
+  padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* Question card */
+.qcard{background:var(--paper);color:var(--ink);border-radius:10px;width:min(1180px,100%);box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden;animation:slide .35s cubic-bezier(.2,.9,.3,1)}
+@keyframes slide{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+.qhead{display:flex;align-items:center;gap:12px;padding:12px 22px;background:var(--ink);color:var(--paper);flex-wrap:wrap}
+.chip{font-family:var(--display);letter-spacing:.05em;font-size:clamp(16px,1.7vw,22px);color:var(--tc)}
+.topic{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#b9c3b8}
+.qhead .sp{flex:1}
+.timer{font-variant-numeric:tabular-nums;font-weight:700;font-size:20px;padding:2px 10px;border-radius:4px;background:#2c3631}
+.timer.low{background:var(--bad);color:#fff;animation:blink .5s steps(2) infinite}
+@keyframes blink{50%{opacity:.6}}
+.qbody{padding:22px 26px 10px;display:grid;gap:18px}
+.qprompt{font-size:clamp(19px,2.15vw,30px);line-height:1.4;display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.qprompt .txt{flex:1 1 380px;min-width:0;text-wrap:pretty}
+.qprompt .ask{font-weight:600}
+i,.m{font-family:var(--math)}
+i{font-style:italic}
+.sys{display:inline-grid;gap:.15em;font-family:var(--math);border-left:3px solid var(--ink);border-radius:14px 0 0 14px;padding:.2em 0 .2em .7em;margin:.4em 0 .1em .2em;font-size:1.08em;line-height:1.35}
+.fr{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.78em;line-height:1.05;margin:0 .1em}
+.fr span:first-child{border-bottom:1.5px solid currentColor;padding:0 .15em}
+.graph{width:min(300px,100%);height:auto;flex:0 0 auto}
+.choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.choice{display:flex;align-items:center;gap:14px;text-align:left;background:#fff;border:2px solid var(--grid);border-radius:8px;padding:12px 16px;color:var(--ink);font-size:clamp(17px,1.9vw,26px);min-height:64px;transition:border-color .15s,background .15s,transform .1s}
+.choice:hover:not(:disabled){border-color:var(--ink);transform:translateY(-1px)}
+.choice .key{font-family:var(--display);font-size:.85em;width:1.6em;height:1.6em;display:grid;place-items:center;border-radius:5px;background:var(--ink);color:var(--paper);flex:0 0 auto}
+.choice .ct{min-width:0}
+.choice:disabled{cursor:default}
+.choice.right{border-color:var(--good);background:#dff3e6}
+.choice.right .key{background:var(--good)}
+.choice.wrong{border-color:var(--bad);background:#f8dedb}
+.choice.wrong .key{background:var(--bad)}
+.choice.dim{opacity:.45}
+.verdict{font-family:var(--display);font-size:clamp(20px,2.4vw,32px);letter-spacing:.03em;padding:10px 16px;border-radius:8px;text-wrap:balance}
+.verdict.good{background:var(--good);color:#fff}
+.verdict.bad{background:var(--bad);color:#fff}
+.solution{background:var(--paper-2);border-radius:8px;padding:12px 18px;font-size:clamp(15px,1.5vw,20px);line-height:1.5}
+.solution h3{margin:0 0 4px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+.solution ol{margin:0;padding-left:1.3em;display:grid;gap:4px}
+.qfoot{display:flex;align-items:center;gap:10px;padding:12px 26px 18px;flex-wrap:wrap}
+.qfoot .sp{flex:1}
+.ghost{background:transparent;border:1.5px solid var(--ink-soft);color:var(--ink);border-radius:6px;padding:8px 14px;font-size:14px;font-weight:600}
+.ghost:hover{border-color:var(--ink)}
+.qfoot .note{font-size:13px;color:var(--ink-soft)}
+.launch{font-family:var(--display);font-size:22px;letter-spacing:.05em;border:0;border-radius:6px;padding:10px 24px;color:#fff;background:var(--tc);box-shadow:0 4px 0 rgba(0,0,0,.35)}
+
+/* Setup + end screens */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;width:min(880px,100%);padding:28px;display:grid;gap:22px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.brand h1{font-family:var(--display);font-weight:400;font-size:clamp(40px,7vw,78px);line-height:.95;margin:0;letter-spacing:.03em;color:var(--amber);text-shadow:0 3px 0 #000}
+.brand p{margin:.5em 0 0;color:var(--muted);font-size:16px;max-width:60ch}
+.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.field{display:grid;gap:6px;min-width:0}
+.field>span,.legend{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.field input[type=text],.field select{background:var(--night);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-family:var(--ui);font-size:17px;width:100%}
+.teamin input{border-left:5px solid var(--tc)!important;font-weight:600}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg label{flex:1 1 0;min-width:90px}
+.seg input{position:absolute;opacity:0}
+.seg span{display:block;text-align:center;border:1px solid var(--line);border-radius:6px;padding:8px 6px;cursor:pointer;font-weight:600}
+.seg span small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.seg input:checked+span{border-color:var(--amber);background:rgba(242,179,61,.12);color:var(--amber)}
+.seg input:focus-visible+span{outline:2px solid var(--amber)}
+.topics{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
+.topics label{display:flex;gap:8px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:14px}
+.topics input{accent-color:var(--amber);width:16px;height:16px}
+.how{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;font-size:14px;color:var(--muted);line-height:1.45}
+.how b{display:block;color:var(--text);font-size:13px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+.deploy{font-family:var(--display);font-size:28px;letter-spacing:.08em;background:var(--amber);color:var(--amber-ink);border:0;border-radius:8px;padding:14px;box-shadow:0 5px 0 #8a6214}
+.deploy:active{transform:translateY(3px);box-shadow:0 2px 0 #8a6214}
+.err{color:var(--bad);font-size:13px;min-height:1em}
+.win h2{font-family:var(--display);font-weight:400;font-size:clamp(34px,6vw,70px);margin:0;color:var(--tc);text-wrap:balance;line-height:1}
+.win p{margin:0;color:var(--muted);font-size:16px}
+.stats{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:16px}
+.stats th,.stats td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right}
+.stats th:first-child,.stats td:first-child{text-align:left;color:var(--muted)}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap}
+.btnrow button{flex:1 1 160px}
+.sec{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:16px;font-weight:600}
+
+@media (max-width:700px){
+  .hud{grid-template-columns:1fr 1fr}
+  .mid{grid-column:1/-1;order:3;min-width:0;grid-auto-flow:column;justify-content:space-between}
+  .choices,.cols,.how{grid-template-columns:1fr}
+  .qbody{padding:16px}
+  .qfoot{padding:10px 16px 16px}
+  .panel{padding:18px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="hud">
+    <section class="team" id="team0" style="--tc:var(--red)">
+      <div class="row"><div class="tname" id="tn0">Red Team</div><div class="tpct" id="tp0">100%</div></div>
+      <div class="bar"><i id="tb0"></i></div>
+      <div class="tmeta"><span class="pips" id="pi0"></span><span id="ts0">0 correct</span></div>
+    </section>
+    <section class="mid">
+      <div class="qn">Question <b id="qn">0</b></div>
+      <div class="wind" id="wind" title="Wind pushes the missile sideways"><svg viewBox="0 0 42 16" aria-hidden="true"><path id="windPath" d="M2 8H38M30 2L38 8L30 14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="windTxt">Calm</span></div>
+      <div class="tools">
+        <button class="tbtn" id="btnSound" aria-pressed="true">Sound on</button>
+        <button class="tbtn" id="btnFull">Full screen</button>
+        <button class="tbtn" id="btnMenu">Menu</button>
+      </div>
+    </section>
+    <section class="team" id="team1" style="--tc:var(--blue)">
+      <div class="row"><div class="tname" id="tn1">Blue Team</div><div class="tpct" id="tp1">100%</div></div>
+      <div class="bar"><i id="tb1"></i></div>
+      <div class="tmeta"><span class="pips" id="pi1"></span><span id="ts1">0 correct</span></div>
+    </section>
+  </header>
+
+  <div class="stagewrap" id="stagewrap">
+    <div class="stage" id="stage">
+      <canvas id="cv" aria-label="Battlefield"></canvas>
+      <div class="banner" id="banner" hidden><h2 id="bannerH"></h2><p id="bannerP"></p></div>
+      <div class="aimbar" id="aimbar" hidden>
+        <div class="dial"><label for="ang">Angle <b id="angV">45°</b></label><input type="range" id="ang" min="5" max="85" value="45"></div>
+        <div class="dial"><label for="pow">Power <b id="powV">70</b></label><input type="range" id="pow" min="10" max="100" value="70"></div>
+        <button class="fire" id="btnFire">FIRE</button>
+        <div class="hint" id="aimHint">Drag on the battlefield to aim, or use ← → for angle and ↑ ↓ for power. Space fires.</div>
+      </div>
+      <div class="aimbar" id="nextbar" hidden>
+        <button class="next" id="btnNext">Next question ▶</button>
+        <div class="hint">or press Enter</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Question card -->
+<div class="overlay" id="qwrap" hidden>
+  <div class="qcard" role="dialog" aria-labelledby="qPrompt">
+    <div class="qhead"><span class="chip" id="qTeam"></span><span class="topic" id="qTopic"></span><span class="sp"></span><span class="timer" id="qTimer" hidden></span></div>
+    <div class="qbody">
+      <div class="qprompt" id="qPrompt"></div>
+      <div class="choices" id="choices"></div>
+      <div class="verdict" id="verdict" hidden></div>
+      <div class="solution" id="solution" hidden></div>
+    </div>
+    <div class="qfoot">
+      <button class="ghost" id="btnSkip">Different question</button>
+      <button class="ghost" id="btnSol" hidden>Show worked solution</button>
+      <span class="note" id="qNote">Click the answer the team gives (or press A, B, C, D).</span>
+      <span class="sp"></span>
+      <button class="launch" id="btnLaunch" hidden>To the launcher ▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- Setup -->
+<div class="overlay" id="setup">
+  <form class="panel" id="setupForm">
+    <div class="brand">
+      <h1>Systems Strike</h1>
+      <p>Unit 3 review: systems of equations. Two teams, two bases, one launcher each. Answer correctly to fire a missile at the other team's base. Miss the question and the other team gets the shot.</p>
+    </div>
+    <div class="cols">
+      <label class="field teamin" style="--tc:var(--red)"><span>Team on the left</span><input type="text" id="n0" maxlength="20" value="Red Team"></label>
+      <label class="field teamin" style="--tc:var(--blue)"><span>Team on the right</span><input type="text" id="n1" maxlength="20" value="Blue Team"></label>
+    </div>
+    <div class="cols">
+      <div class="field"><span class="legend">Game length</span>
+        <div class="seg">
+          <label><input type="radio" name="len" value="0.6"><span>Quick<small>about 15 questions</small></span></label>
+          <label><input type="radio" name="len" value="1" checked><span>Standard<small>about 25 questions</small></span></label>
+          <label><input type="radio" name="len" value="1.5"><span>Long<small>about 35 questions</small></span></label>
+        </div>
+      </div>
+      <label class="field"><span>Answer timer</span>
+        <select id="timerSel">
+          <option value="0">No timer</option>
+          <option value="60">1 minute</option>
+          <option value="90">1.5 minutes</option>
+          <option value="120">2 minutes</option>
+          <option value="180">3 minutes</option>
+        </select>
+      </label>
+    </div>
+    <div class="field"><span class="legend">Question types</span><div class="topics" id="topicBoxes"></div></div>
+    <div class="how">
+      <div><b>1 · Solve</b>The team on turn works the problem. Click the answer they call out.</div>
+      <div><b>2 · Aim</b>Correct: they aim and fire. Wrong: the other team steals the missile. Watch the wind.</div>
+      <div><b>3 · Destroy</b>Knock out all four buildings to win. Three right in a row earns a Bunker Buster.</div>
+    </div>
+    <div class="err" id="setupErr"></div>
+    <button class="deploy" type="submit">Deploy ▶</button>
+  </form>
+</div>
+
+<!-- Menu -->
+<div class="overlay" id="menu" hidden>
+  <div class="panel" style="width:min(460px,100%)">
+    <h2 style="margin:0;font-family:var(--display);font-weight:400;font-size:32px;color:var(--amber)">Paused</h2>
+    <div class="btnrow" style="flex-direction:column">
+      <button class="sec" id="mResume">Resume</button>
+      <button class="sec" id="mEnd">End game and show results</button>
+      <button class="sec" id="mNew">New game setup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Win -->
+<div class="overlay" id="winwrap" hidden style="background:rgba(4,7,9,.35)">
+  <div class="panel win" id="winPanel">
+    <h2 id="winH"></h2>
+    <p id="winP"></p>
+    <div style="overflow-x:auto"><table class="stats" id="winStats"></table></div>
+    <div class="btnrow">
+      <button class="deploy" id="wRematch" style="font-size:22px">Rematch</button>
+      <button class="sec" id="wNew">New game setup</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= Utilities ================= */
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const ri=(a,b)=>Math.floor(a+Math.random()*(b-a+1));
+const nz=(a,b)=>{let v;do v=ri(a,b);while(v===0);return v};
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const gcd=(a,b)=>{a=Math.abs(a);b=Math.abs(b);while(b){[a,b]=[b,a%b]}return a};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const smooth=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+const $=id=>document.getElementById(id);
+const fmt=v=>v.toLocaleString('en-US');
+const rstep=(a,b,s)=>a+s*ri(0,Math.floor((b-a)/s));
+
+/* ================= Math formatting ================= */
+const M='−';
+const n=v=>v<0?M+Math.abs(v):''+v;
+const V=s=>`<i>${s}</i>`;
+function term(c,v,first){
+  if(c===0)return '';
+  const a=Math.abs(c), co=(a===1&&v)?'':''+a, body=co+(v?V(v):'');
+  return first?(c<0?M:'')+body:(c<0?` ${M} `:' + ')+body;
+}
+function expr(ts){let s='',f=true;for(const [c,v] of ts){if(c===0)continue;s+=term(c,v,f);f=false}return s||'0'}
+const std=(a,b,c)=>`${expr([[a,'x'],[b,'y']])} = ${n(c)}`;
+const si=(m,b)=>`${V('y')} = ${expr([[m,'x'],[b,'']])}`;
+const P=(x,y)=>`(${n(x)}, ${n(y)})`;
+const sys=(e1,e2)=>`<span class="sys"><span>${e1}</span><span>${e2}</span></span>`;
+const cs=a=>a===1?'':a===-1?M:n(a);
+function fterm(num,den,v,first){
+  if(num===0)return '';
+  if(den<0){num=-num;den=-den}
+  const g=gcd(num,den);num/=g;den/=g;
+  const neg=num<0,a=Math.abs(num);
+  const co=den===1?((a===1&&v)?'':''+a):`<span class="fr"><span>${a}</span><span>${den}</span></span>`;
+  const body=co+(v?V(v):'');
+  return first?(neg?M:'')+body:(neg?` ${M} `:' + ')+body;
+}
+// "lhs = (mn/md)·rv + (bn/bd)"
+function lin(lhs,rv,mn,md,bn,bd){const t=fterm(mn,md,rv,true)+fterm(bn,bd,'',mn===0);return `${V(lhs)} = ${t||'0'}`}
+const sub=(a,b,x,y)=>`${cs(a)}(${n(x)}) ${b<0?M:'+'} ${Math.abs(b)===1?'':Math.abs(b)}(${n(y)})`;
+
+function mc(correct,ds,fb){
+  const set=[correct];
+  for(const d of ds){if(set.length>=4)break;if(!set.includes(d))set.push(d)}
+  let g=0;while(set.length<4&&g++<80){const d=fb();if(!set.includes(d))set.push(d)}
+  const order=shuffle(set.slice());
+  return {choices:order,answer:order.indexOf(correct)};
+}
+const ptChoices=(h,k)=>mc(P(h,k),shuffle([P(k,h),P(-h,k),P(h,-k),P(-h,-k),P(h+1,k),P(h,k-1)]),()=>P(ri(-9,9),ri(-9,9)));
+const numChoices=(v,ds,pre='')=>mc(pre+n(v),ds.filter(d=>Number.isInteger(d)).map(d=>pre+n(d)),()=>pre+n(v+nz(-6,6)));
+
+/* ================= Graph drawing (SVG) ================= */
+let gid=0;
+function graphSVG(lines){
+  const R=8,S=320,pad=12,u=(S-2*pad)/(2*R),id='gc'+(++gid);
+  const X=x=>(pad+(x+R)*u).toFixed(1),Y=y=>(pad+(R-y)*u).toFixed(1);
+  let g=`<svg class="graph" viewBox="0 0 ${S} ${S}" role="img" aria-label="Coordinate graph with two lines"><defs><clipPath id="${id}"><rect x="${pad}" y="${pad}" width="${S-2*pad}" height="${S-2*pad}"/></clipPath></defs>`;
+  g+=`<rect x="${pad}" y="${pad}" width="${S-2*pad}" height="${S-2*pad}" fill="#fff" stroke="#c3c9b9"/>`;
+  for(let i=-R+1;i<R;i++){if(i===0)continue;g+=`<line x1="${X(i)}" y1="${pad}" x2="${X(i)}" y2="${S-pad}" stroke="#dfe3d6"/><line x1="${pad}" y1="${Y(i)}" x2="${S-pad}" y2="${Y(i)}" stroke="#dfe3d6"/>`}
+  g+=`<line x1="${X(0)}" y1="${pad}" x2="${X(0)}" y2="${S-pad}" stroke="#4b554e" stroke-width="1.6"/><line x1="${pad}" y1="${Y(0)}" x2="${S-pad}" y2="${Y(0)}" stroke="#4b554e" stroke-width="1.6"/>`;
+  for(let i=-6;i<=6;i+=2){if(!i)continue;g+=`<text x="${X(i)}" y="${+Y(0)+13}" font-size="10" text-anchor="middle" fill="#56625b" font-family="Chakra Petch,sans-serif">${n(i)}</text><text x="${+X(0)-5}" y="${+Y(i)+3.5}" font-size="10" text-anchor="end" fill="#56625b" font-family="Chakra Petch,sans-serif">${n(i)}</text>`}
+  g+=`<g clip-path="url(#${id})">`;
+  lines.forEach(l=>{const y1=l.m*-R+l.b,y2=l.m*R+l.b;g+=`<line x1="${X(-R)}" y1="${Y(y1)}" x2="${X(R)}" y2="${Y(y2)}" stroke="${l.c}" stroke-width="${l.w||3}" ${l.dash?'stroke-dasharray="9 7"':''} stroke-linecap="round"/>`});
+  g+='</g>';
+  lines.forEach((l,j)=>{if(!l.label)return;const xs=j%2===0?[6.5,6,5.5,5,4.5,4,3,2,1,-1,-2,-3,-4,-5,-6]:[-6.5,-6,-5.5,-5,-4.5,-4,-3,-2,-1,1,2,3,4,5,6];
+    for(const x of xs){const y=l.m*x+l.b;if(Math.abs(y)<6.6){g+=`<circle cx="${X(x)}" cy="${Y(y)}" r="11" fill="${l.c}"/><text x="${X(x)}" y="${+Y(y)+4.5}" font-size="13" font-weight="700" text-anchor="middle" fill="#fff" font-family="Chakra Petch,sans-serif">${l.label}</text>`;break}}});
+  return g+'</svg>';
+}
+const LA='#c2410c',LB='#1d6fb8';
+
+/* ================= Question generators ================= */
+const SLOPES=[[-3,1],[-2,1],[-1,1],[-1,2],[1,2],[1,1],[2,1],[3,1],[-2,3],[2,3]];
+function gGraph(){
+  let h,k,s1,s2,b1,b2,tries=0;
+  do{
+    s1=pick(SLOPES);do s2=pick(SLOPES);while(s2===s1);
+    h=ri(-5,5);k=ri(-5,5);
+    const lcm=s1[1]*s2[1];h=Math.round(h/lcm)*lcm;
+    b1=k-s1[0]*h/s1[1];b2=k-s2[0]*h/s2[1];
+  }while((Math.abs(b1)>7||Math.abs(b2)>7||!Number.isInteger(b1)||!Number.isInteger(b2))&&++tries<200);
+  const svg=graphSVG([{m:s1[0]/s1[1],b:b1,c:LA,label:'A'},{m:s2[0]/s2[1],b:b2,c:LB,label:'B'}]);
+  if(Math.random()<.6){
+    return {topic:'Reading graphs',prompt:`${svg}<div class="txt"><span class="ask">Based on the graph, what is the solution to the system of equations?</span></div>`,
+      ...ptChoices(h,k),
+      steps:[`Find where line A and line B cross: ${P(h,k)}.`,`That point lies on both lines, so it makes both equations true. It is the solution.`]};
+  }
+  const useA=Math.random()<.5,s=useA?s1:s2,b=useA?b1:b2,L=useA?'A':'B';
+  const c=lin('y','x',s[0],s[1],b,1);
+  const ds=shuffle([lin('y','x',-s[0],s[1],b,1),lin('y','x',s[1],s[0],b,1),lin('y','x',s[0],s[1],-b,1),lin('y','x',s[0],s[1],b+ (Math.random()<.5?1:-1),1),lin('y','x',-s[1],s[0],b,1)]);
+  return {topic:'Reading graphs',prompt:`${svg}<div class="txt"><span class="ask">What is the equation of line ${L}?</span></div>`,
+    ...mc(c,ds,()=>lin('y','x',nz(-3,3),1,ri(-6,6),1)),
+    steps:[`The ${V('y')}-intercept of line ${L} is ${n(b)} (where it crosses the ${V('y')}-axis).`,
+      `Slope = rise ÷ run. Line ${L} goes ${s[0]>0?'up':'down'} ${Math.abs(s[0])} for every ${s[1]} to the right, so the slope is ${fterm(s[0],s[1],'',true)}.`,
+      `Equation: <b>${c}</b>`]};
+}
+function gConcept(){
+  const v=pick(['none','inf','one','graphN','graphN','graphN']);
+  if(v==='none'||v==='inf'){
+    const o=['Two parallel lines that never touch','Two lines that cross at exactly one point','The same line drawn twice (one on top of the other)','Two lines that cross at the origin'];
+    return {topic:'Reading graphs',prompt:`<div class="txt"><span class="ask">What does a system of equations look like on a graph when it has ${v==='none'?'<b>NO SOLUTION</b>':'<b>INFINITELY MANY SOLUTIONS</b>'}?</span></div>`,
+      choices:o,answer:v==='none'?0:2,steps:[`A solution is a point on both lines.`,v==='none'?`Parallel lines never meet, so no point is on both lines. No solution.`:`If both equations make the same line, every point on that line is on both. Infinitely many solutions.`]};
+  }
+  if(v==='one'){
+    const o=['The slopes are different','The slopes are the same and the y-intercepts are different','The slopes and the y-intercepts are both the same','Both slopes must be positive'];
+    return {topic:'Reading graphs',prompt:`<div class="txt"><span class="ask">A system of two linear equations has <b>exactly one solution</b>. What must be true about the two lines?</span></div>`,
+      choices:o,answer:0,steps:[`Lines with different slopes are not parallel, so they cross at exactly one point.`,`Same slope with different intercepts gives parallel lines (no solution). Same slope and same intercept gives the same line (infinitely many).`]};
+  }
+  const kind=pick(['one','none','inf']);
+  const s=pick(SLOPES),m=s[0]/s[1];let b=ri(-4,4),lines;
+  if(kind==='inf')lines=[{m,b,c:LB,w:7,label:''},{m,b,c:LA,dash:true,label:''}];
+  else if(kind==='none'){let b2;do b2=ri(-5,5);while(Math.abs(b2-b)<2);lines=[{m,b,c:LA,label:'A'},{m,b:b2,c:LB,label:'B'}]}
+  else{let s2;do s2=pick(SLOPES);while(s2===s);lines=[{m,b,c:LA,label:'A'},{m:s2[0]/s2[1],b:ri(-4,4),c:LB,label:'B'}]}
+  const o=['Exactly one solution','No solution','Infinitely many solutions'];
+  return {topic:'Reading graphs',prompt:`${graphSVG(lines)}<div class="txt"><span class="ask">How many solutions does the system graphed here have?</span>${kind==='inf'?'<br><small style="font-size:.7em;color:var(--ink-soft)">Both equations are drawn: one solid, one dashed.</small>':''}</div>`,
+    choices:o,answer:{one:0,none:1,inf:2}[kind],
+    steps:[kind==='one'?'The lines cross at one point, so there is exactly one solution.':kind==='none'?'The lines are parallel (same slope, different intercepts). They never meet: no solution.':'Both equations make the same line. Every point on it is a solution: infinitely many.']};
+}
+function gCheck(){
+  const h=ri(-5,5),k=ri(-5,5);let a1,b1,a2,b2;
+  do{a1=nz(-7,7);b1=nz(-5,5);a2=nz(-7,7);b2=nz(-5,5)}while(a1*b2-a2*b1===0||(a1===a2&&b1===b2));
+  const c1=a1*h+b1*k,c2=a2*h+b2*k,kind=pick(['both','both','first','second','neither']);
+  let px=h,py=k;
+  if(kind==='first'){const t=pick([-1,1]);px=h+b1*t;py=k-a1*t}
+  if(kind==='second'){const t=pick([-1,1]);px=h+b2*t;py=k-a2*t}
+  if(kind==='neither'){let g=0;do{px=h+nz(-3,3);py=k+nz(-3,3)}while((a1*px+b1*py===c1||a2*px+b2*py===c2)&&++g<99)}
+  const s1=a1*px+b1*py,s2=a2*px+b2*py;
+  const o=['Yes, it makes both equations true','No, it only works in the first equation','No, it only works in the second equation','No, it works in neither equation'];
+  const ck=(s,c)=>s===c?`${n(s)} = ${n(c)} ✓`:`${n(s)} ≠ ${n(c)} ✗`;
+  return {topic:'Checking a solution',prompt:`<div class="txt"><span class="ask">Is the point ${P(px,py)} a solution to the system?</span><br>${sys(std(a1,b1,c1),std(a2,b2,c2))}</div>`,
+    choices:o,answer:{both:0,first:1,second:2,neither:3}[kind],
+    steps:[`Substitute ${V('x')} = ${n(px)} and ${V('y')} = ${n(py)} into each equation.`,
+      `First: ${sub(a1,b1,px,py)} = ${ck(s1,c1)}`,`Second: ${sub(a2,b2,px,py)} = ${ck(s2,c2)}`,
+      kind==='both'?'It works in both, so it IS a solution.':'A solution must make BOTH equations true, so it is NOT a solution.']};
+}
+function gCount(){
+  const kind=pick(['one','none','inf']);
+  let a=nz(-6,6),b=nz(-4,4);const g=gcd(a,b);a/=g;b/=g;if(b<0){a=-a;b=-b}
+  let c=ri(-9,9)*(Math.random()<.5?b:1),a2,b2,c2;
+  if(kind==='inf'){const m=pick([-3,-2,2,3,4]);a2=a*m;b2=b*m;c2=c*m}
+  else if(kind==='none'){const m=pick([-3,-2,-1,2,3]);a2=a*m;b2=b*m;do c2=ri(-20,20);while(c2===c*m)}
+  else{do{a2=nz(-6,6);b2=nz(-5,5)}while(a*b2-a2*b===0);c2=ri(-15,15)}
+  let e1=std(a,b,c),e2=std(a2,b2,c2);
+  if(Math.random()<.5&&a%b===0&&c%b===0)e1=si(-a/b,c/b);
+  else if(Math.random()<.4&&a2%b2===0&&c2%b2===0)e2=si(-a2/b2,c2/b2);
+  const o=['Exactly one solution','No solution','Infinitely many solutions'];
+  return {topic:'Number of solutions',prompt:`<div class="txt"><span class="ask">How many solutions does this system have?</span><br>${sys(e1,e2)}</div>`,
+    choices:o,answer:{one:0,none:1,inf:2}[kind],
+    steps:[`Write both in slope-intercept form.`,`First: ${lin('y','x',-a,b,c,b)}`,`Second: ${lin('y','x',-a2,b2,c2,b2)}`,
+      kind==='one'?'Different slopes, so the lines cross once: exactly one solution.':kind==='none'?'Same slope, different y-intercepts: parallel lines, no solution.':'Same slope and same y-intercept: it is the same line, infinitely many solutions.']};
+}
+function gSub(){
+  const h=ri(-6,6),k=ri(-7,7);
+  if(Math.random()<.55){
+    let m,b,a,c,g=0;do{m=nz(-4,4);b=k-m*h;a=nz(-5,5);c=nz(-5,5)}while((Math.abs(b)>12||a+c*m===0)&&++g<200);
+    const d=a*h+c*k,rhs=expr([[m,'x'],[b,'']]);
+    const top=Math.random()<.5;
+    return {topic:'Substitution',prompt:`<div class="txt"><span class="ask">Solve the system using substitution.</span><br>${top?sys(si(m,b),std(a,c,d)):sys(std(a,c,d),si(m,b))}</div>`,
+      ...ptChoices(h,k),
+      steps:[`Replace ${V('y')} with ${rhs}: ${expr([[a,'x']])} ${c<0?M:'+'} ${Math.abs(c)===1?'':Math.abs(c)}(${rhs}) = ${n(d)}`,
+        `Distribute and combine: ${expr([[a+c*m,'x'],[c*b,'']])} = ${n(d)}`,
+        `${expr([[a+c*m,'x']])} = ${n(d-c*b)}, so ${V('x')} = ${n(h)}`,
+        `${V('y')} = ${cs(m)}(${n(h)})${b?` ${b<0?M:'+'} ${Math.abs(b)}`:''} = ${n(k)}`,`Solution: <b>${P(h,k)}</b>`]};
+  }
+  let a1,a2,b2,g=0;do{a1=nz(-4,4);a2=nz(-5,5);b2=nz(-4,4)}while((a2-b2*a1===0)&&++g<200);
+  const c1=a1*h+k,c2=a2*h+b2*k,iso=expr([[-a1,'x'],[c1,'']]);
+  return {topic:'Substitution',prompt:`<div class="txt"><span class="ask">Solve the system using substitution.</span><br>${sys(std(a1,1,c1),std(a2,b2,c2))}</div>`,
+    ...ptChoices(h,k),
+    steps:[`Solve the first equation for ${V('y')}: ${V('y')} = ${iso}`,
+      `Substitute: ${expr([[a2,'x']])} ${b2<0?M:'+'} ${Math.abs(b2)===1?'':Math.abs(b2)}(${iso}) = ${n(c2)}`,
+      `Combine: ${expr([[a2-b2*a1,'x'],[b2*c1,'']])} = ${n(c2)}, so ${V('x')} = ${n(h)}`,
+      `${V('y')} = ${n(c1)} ${-a1*h<0?M:'+'} ${Math.abs(a1*h)} = ${n(k)}`,`Solution: <b>${P(h,k)}</b>`]};
+}
+function gElim(){
+  const h=ri(-6,6),k=ri(-7,7);
+  if(Math.random()<.45){
+    const elimX=Math.random()<.5;let a,b,e,g=0;do{a=nz(-6,6);b=nz(-6,6);e=nz(-6,6)}while((b+e===0||Math.abs(b)===Math.abs(a)&&e===-b)&&++g<200);
+    let e1,e2,steps;
+    if(elimX){const c=a*h+b*k,f=-a*h+e*k;e1=std(a,b,c);e2=std(-a,e,f);
+      steps=[`The ${V('x')}-terms are opposites. Add the equations: ${expr([[b+e,'y']])} = ${n(c+f)}`,`${V('y')} = ${n(k)}`,`Substitute into the first: ${sub(a,b,'x',k).replace('(x)',V('x'))} = ${n(c)} → ${expr([[a,'x']])} = ${n(c-b*k)}`,`${V('x')} = ${n(h)}`,`Solution: <b>${P(h,k)}</b>`];}
+    else{const c=b*h+a*k,f=e*h-a*k;e1=std(b,a,c);e2=std(e,-a,f);
+      steps=[`The ${V('y')}-terms are opposites. Add the equations: ${expr([[b+e,'x']])} = ${n(c+f)}`,`${V('x')} = ${n(h)}`,`Substitute into the first: ${expr([[b*h,''],[a,'y']])} = ${n(c)} → ${expr([[a,'y']])} = ${n(c-b*h)}`,`${V('y')} = ${n(k)}`,`Solution: <b>${P(h,k)}</b>`];}
+    return {topic:'Elimination',prompt:`<div class="txt"><span class="ask">Solve the system using elimination.</span><br>${sys(e1,e2)}</div>`,...ptChoices(h,k),steps};
+  }
+  let a1,b1,a2,mul,g=0;do{a1=nz(-5,5);b1=pick([-2,-1,1,2]);mul=ri(2,4);a2=nz(-8,8)}while((a2+mul*a1===0)&&++g<200);
+  const b2=-mul*b1,c1=a1*h+b1*k,c2=a2*h+b2*k;
+  return {topic:'Elimination',prompt:`<div class="txt"><span class="ask">Solve the system using elimination.</span><br>${sys(std(a1,b1,c1),std(a2,b2,c2))}</div>`,...ptChoices(h,k),
+    steps:[`Multiply the first equation by ${mul}: ${std(mul*a1,mul*b1,mul*c1)}`,`Now the ${V('y')}-terms are opposites. Add: ${expr([[mul*a1+a2,'x']])} = ${n(mul*c1+c2)}`,`${V('x')} = ${n(h)}`,
+      `Substitute into the first: ${expr([[a1*h,''],[b1,'y']])} = ${n(c1)} → ${V('y')} = ${n(k)}`,`Solution: <b>${P(h,k)}</b>`]};
+}
+const SHOPS=[
+  {a:'Beth',b:'Heather',v:'sold',i1:'sugar cookie dough',i2:'oatmeal cookie dough',u1:'packages of sugar cookie dough',u2:'packages of oatmeal cookie dough',one1:'package of sugar cookie dough',one2:'package of oatmeal cookie dough',intro:'Beth and Heather are selling cookie dough for a school fundraiser.',p:[8,15]},
+  {a:'Marcus',b:'Lena',v:'bought',u1:'adult tickets',u2:'student tickets',one1:'adult ticket',one2:'student ticket',intro:'Marcus and Lena are buying tickets to the spring musical.',p:[5,14]},
+  {a:'Ava',b:'Diego',v:'sold',u1:'large candles',u2:'small candles',one1:'large candle',one2:'small candle',intro:'Ava and Diego run a candle booth at the craft fair.',p:[6,18]},
+  {a:'Coach Ruiz',b:'Coach Patel',v:'bought',u1:'basketballs',u2:'soccer balls',one1:'basketball',one2:'soccer ball',intro:'Two coaches are buying equipment for the gym.',p:[14,32]},
+  {a:'Nora',b:'Sam',v:'ordered',u1:'pizzas',u2:'salads',one1:'pizza',one2:'salad',intro:'Nora and Sam are ordering food for the robotics team.',p:[6,16]},
+  {a:'Jayden',b:'Mia',v:'sold',u1:'rolls of wrapping paper',u2:'tins of popcorn',one1:'roll of wrapping paper',one2:'tin of popcorn',intro:'Jayden and Mia are selling items for the band fundraiser.',p:[5,14]},
+];
+function gPrice(){
+  const s=pick(SHOPS);let p1,p2,q;
+  do{p1=ri(s.p[0],s.p[1]);p2=ri(s.p[0],s.p[1])}while(p1===p2);
+  do{q=[ri(2,14),ri(2,14),ri(2,14),ri(2,14)]}while(q[0]*q[3]-q[1]*q[2]===0||q[0]===q[2]&&q[1]===q[3]);
+  const T1=q[0]*p1+q[1]*p2,T2=q[2]*p1+q[3]*p2;
+  const story=`${s.intro} ${s.a} ${s.v} ${q[0]} ${s.u1} and ${q[1]} ${s.u2} for a total of $${T1}. ${s.b} ${s.v} ${q[2]} ${s.u1} and ${q[3]} ${s.u2} for a total of $${T2}.`;
+  const letv=`Let ${V('x')} = the price of one ${s.one1} and ${V('y')} = the price of one ${s.one2}.`;
+  const steps=[letv,`${s.a}: ${std(q[0],q[1],T1)}`,`${s.b}: ${std(q[2],q[3],T2)}`,`Solve the system (elimination, or graph both in Desmos and find where they cross): ${V('x')} = ${p1}, ${V('y')} = ${p2}.`,`Check: ${q[0]}(${p1}) + ${q[1]}(${p2}) = ${T1} ✓`];
+  const v=pick(['eq','p1','p2','p1','p2']);
+  if(v==='eq'){
+    const who=Math.random()<.5?0:1,A=who?q[2]:q[0],B=who?q[3]:q[1],T=who?T2:T1,To=who?T1:T2;
+    const c=std(A,B,T);
+    return {topic:'Word problems',prompt:`<div class="txt">${story}<br><span class="ask">${letv} Which equation represents what ${who?s.b:s.a} ${s.v}?</span></div>`,
+      ...mc(c,shuffle([std(B,A,T),std(A,B,To),`${A+B}(${V('x')} + ${V('y')}) = ${T}`,std(who?q[0]:q[2],who?q[1]:q[3],T)]),()=>std(A+nz(-2,2),B,T)),steps};
+  }
+  const want=v==='p1'?p1:p2,other=v==='p1'?p2:p1;
+  return {topic:'Word problems',prompt:`<div class="txt">${story}<br><span class="ask">What is the price of one ${v==='p1'?s.one1:s.one2}?</span></div>`,
+    ...mc('$'+want,shuffle(['$'+other,'$'+(want+1),'$'+(want-1),'$'+(want+2),'$'+Math.round(T1/(q[0]+q[1]))]),()=>'$'+(want+nz(-5,5))),steps};
+}
+const BIZ=[
+  {u:'projects',F:[250,600,50],v:[20,45,5],p:[80,140,5],t:(F,v,p)=>`Jasmine has an advertising company and invests $${fmt(F)} in new digital design software. Each project costs her $${v} in labor, and she charges customers $${p} per project.`},
+  {u:'tables',F:[20000,60000,5000],v:[150,300,25],p:[400,650,25],t:(F,v,p)=>`A company makes handcrafted wooden tables. The fixed costs for running the factory are $${fmt(F)} per year, and each table costs $${v} to produce. The company sells each table for $${p}.`},
+  {u:'T-shirts',F:[300,900,50],v:[4,9,1],p:[15,25,1],t:(F,v,p)=>`Malik starts a T-shirt printing business and buys a heat press for $${fmt(F)}. Materials for each shirt cost $${v}, and he sells each shirt for $${p}.`},
+  {u:'burritos',F:[1200,3000,100],v:[2,4,1],p:[8,12,1],t:(F,v,p)=>`A food truck spends $${fmt(F)} to get ready for the summer season. Each burrito costs $${v} to make and sells for $${p}.`},
+  {u:'phone cases',F:[180,450,10],v:[2,5,1],p:[12,20,1],t:(F,v,p)=>`Ella buys a 3D printer for $${fmt(F)}. Each phone case uses $${v} worth of filament, and she sells each case for $${p}.`},
+];
+function gBreak(){
+  const b=pick(BIZ);let F,v,p;do{F=rstep(...b.F);v=rstep(...b.v);p=rstep(...b.p)}while(p-v<3);
+  const x=V('x'),C=V('C'),Rr=V('R'),story=b.t(F,v,p),exact=F/(p-v),N=Math.ceil(exact);
+  const steps=[`Cost: ${C} = ${fmt(F)} + ${v}${x}  (fixed cost + cost per item)`,`Revenue: ${Rr} = ${p}${x}`,`Break even when revenue = cost: ${p}${x} = ${fmt(F)} + ${v}${x}`,
+    `${p-v}${x} = ${fmt(F)} → ${x} = ${Number.isInteger(exact)?fmt(exact):exact.toFixed(2)}`,Number.isInteger(exact)?`They break even at <b>${fmt(N)} ${b.u}</b>.`:`You can't sell part of one, so round up: <b>${fmt(N)} ${b.u}</b>.`];
+  const kind=pick(['cost','rev','be','be']);
+  if(kind==='cost')return {topic:'Word problems',prompt:`<div class="txt">${story}<br><span class="ask">Let ${x} = the number of ${b.u}. Which equation represents the total cost?</span></div>`,
+    ...mc(`${C} = ${fmt(F)} + ${v}${x}`,[`${C} = ${v} + ${fmt(F)}${x}`,`${C} = ${p}${x}`,`${C} = ${fmt(F)} + ${p}${x}`,`${C} = ${fmt(F)} − ${v}${x}`],()=>`${C} = ${fmt(F+ri(1,9)*10)} + ${v}${x}`),steps};
+  if(kind==='rev')return {topic:'Word problems',prompt:`<div class="txt">${story}<br><span class="ask">Let ${x} = the number of ${b.u}. Which equation represents the revenue (money coming in)?</span></div>`,
+    ...mc(`${Rr} = ${p}${x}`,[`${Rr} = ${fmt(F)} + ${p}${x}`,`${Rr} = ${p-v}${x}`,`${Rr} = ${v}${x}`,`${Rr} = ${p} + ${x}`],()=>`${Rr} = ${p+ri(1,9)}${x}`),steps};
+  const ds=[Number.isInteger(exact)?N+1:Math.floor(exact),N-1,Math.ceil(F/p),Math.ceil(F/v),Math.ceil(F/(p+v))].filter(d=>d>0&&d!==N);
+  return {topic:'Word problems',prompt:`<div class="txt">${story}<br><span class="ask">How many ${b.u} must be sold to break even?</span></div>`,
+    ...mc(fmt(N),shuffle(ds).map(fmt),()=>fmt(N+nz(-9,9))),steps};
+}
+function gReview(){
+  const v=pick(['ooo1','ooo2','two','dist','lit','lit']);
+  if(v==='ooo1'){
+    const a=ri(1,9),b=ri(2,4),c=ri(1,3),d=ri(1,3),e=ri(1,9),val=a-b*(c+d)**2-e;
+    return {topic:'Algebra review',prompt:`<div class="txt"><span class="ask">Simplify:</span><br><span class="m" style="font-size:1.2em">${a} − ${b}(${c} + ${d})<sup>2</sup> − ${e}</span></div>`,
+      ...numChoices(val,[(a-b)*(c+d)**2-e,a-(b*(c+d))**2-e,a-b*(c+d)*2-e,a-b*(c+d)**2+e]),
+      steps:[`Parentheses: ${c} + ${d} = ${c+d}`,`Exponent: ${c+d}<sup>2</sup> = ${(c+d)**2}`,`Multiply: ${b} · ${(c+d)**2} = ${b*(c+d)**2}`,`Left to right: ${a} − ${b*(c+d)**2} − ${e} = <b>${n(val)}</b>`]};
+  }
+  if(v==='ooo2'){
+    const b=ri(2,6),q=ri(2,6),a=b*q,c=ri(1,9),d=ri(1,9),e=ri(1,5),f=ri(1,5),val=q-c+d-(e+f);
+    return {topic:'Algebra review',prompt:`<div class="txt"><span class="ask">Simplify:</span><br><span class="m" style="font-size:1.2em">${a} ÷ ${b} − ${c} + ${d} − (${e} + ${f})</span></div>`,
+      ...numChoices(val,[q-c+d-e+f,q-(c+d)-(e+f),q+c+d-(e+f),q-c-d-(e+f)]),
+      steps:[`Parentheses: ${e} + ${f} = ${e+f}`,`Divide: ${a} ÷ ${b} = ${q}`,`Add and subtract left to right: ${q} − ${c} + ${d} − ${e+f} = <b>${n(val)}</b>`]};
+  }
+  if(v==='two'){
+    const x=nz(-9,12),a=nz(-6,7),b=nz(-12,12),c=a*x+b;
+    return {topic:'Algebra review',prompt:`<div class="txt"><span class="ask">Solve for ${V('x')}:</span><br><span class="m" style="font-size:1.2em">${expr([[a,'x'],[b,'']])} = ${n(c)}</span></div>`,
+      ...numChoices(x,[(c+b)/a,c/a-b,-x,x+1],V('x')+' = '),
+      steps:[`${b>0?'Subtract':'Add'} ${Math.abs(b)} ${b>0?'from':'to'} both sides: ${expr([[a,'x']])} = ${n(c-b)}`,`Divide by ${n(a)}: <b>${V('x')} = ${n(x)}</b>`]};
+  }
+  if(v==='dist'){
+    const x=ri(-6,10),a=ri(2,5),b=nz(-5,5),c=nz(-9,9),d=a*(x-b)+c;
+    return {topic:'Algebra review',prompt:`<div class="txt"><span class="ask">Solve for ${V('x')}:</span><br><span class="m" style="font-size:1.2em">${a}(${expr([[1,'x'],[-b,'']])})${c<0?' '+M+' ':' + '}${Math.abs(c)} = ${n(d)}</span></div>`,
+      ...numChoices(x,[(d-c)/a-b,(d-c)/a,(d+c)/a+b,x+b],V('x')+' = '),
+      steps:[`Distribute: ${expr([[a,'x'],[-a*b,'']])}${c<0?' '+M+' ':' + '}${Math.abs(c)} = ${n(d)}`,`Combine: ${expr([[a,'x'],[c-a*b,'']])} = ${n(d)}`,`${expr([[a,'x']])} = ${n(d-c+a*b)}`,`<b>${V('x')} = ${n(x)}</b>`]};
+  }
+  const forY=Math.random()<.6;let a=nz(-6,6),b=nz(-7,7),c=nz(-15,15);
+  if(forY&&Math.abs(b)===1)b=b*ri(2,4);if(!forY&&Math.abs(a)===1)a=a*ri(2,4);
+  const e=std(a,b,c);
+  const T=forY?'y':'x',O=forY?'x':'y',ct=forY?a:b,dv=forY?b:a;
+  const corr=lin(T,O,-ct,dv,c,dv);
+  const ds=[lin(T,O,ct,dv,c,dv),lin(T,O,-ct,dv,-c,dv),lin(T,O,-ct,1,c,dv),lin(T,O,-dv,ct,c,ct),lin(T,O,-ct,dv,c,1)];
+  return {topic:'Algebra review',prompt:`<div class="txt"><span class="ask">Solve for ${V(T)}:</span><br><span class="m" style="font-size:1.2em">${e}</span></div>`,
+    ...mc(corr,shuffle(ds),()=>lin(T,O,nz(-5,5),ri(1,4),ri(-9,9),ri(1,3))),
+    steps:[`Move the ${V(O)}-term: ${expr([[dv,T]])} = ${expr([[-ct,O],[c,'']])}`,`Divide every term by ${n(dv)}: <b>${corr}</b>`]};
+}
+const TOPICS=[
+  {id:'graph',label:'Reading graphs',gens:[gGraph,gGraph,gConcept],w:2},
+  {id:'check',label:'Checking a solution',gens:[gCheck],w:1},
+  {id:'count',label:'Number of solutions',gens:[gCount],w:1},
+  {id:'sub',label:'Substitution',gens:[gSub],w:2},
+  {id:'elim',label:'Elimination',gens:[gElim],w:2},
+  {id:'word',label:'Word problems',gens:[gPrice,gBreak],w:2},
+  {id:'review',label:'Algebra review',gens:[gReview],w:1},
+];
+
+/* ================= Sound ================= */
+const Sfx={ctx:null,on:true,
+  init(){if(this.ctx)return;try{const C=window.AudioContext||window.webkitAudioContext;this.ctx=new C();const sr=this.ctx.sampleRate,len=sr*2,b=this.ctx.createBuffer(1,len,sr),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;this.nb=b;this.out=this.ctx.createDynamicsCompressor();const g=this.ctx.createGain();g.gain.value=.8;this.out.connect(g);g.connect(this.ctx.destination)}catch(e){this.ctx=null}},
+  ok(){if(this.ctx&&this.ctx.state==='suspended')this.ctx.resume();return this.on&&this.ctx},
+  noise(dur,{f0=1000,f1=f0,type='lowpass',q=.7,gain=.6,att=.005,delay=0}={}){if(!this.ok())return;const c=this.ctx,t=c.currentTime+delay,s=c.createBufferSource();s.buffer=this.nb;s.loop=true;const fl=c.createBiquadFilter();fl.type=type;fl.Q.value=q;fl.frequency.setValueAtTime(f0,t);fl.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);const g=c.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+att);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);s.connect(fl);fl.connect(g);g.connect(this.out);s.start(t,Math.random());s.stop(t+dur+.05)},
+  tone(dur,{f0=440,f1=f0,type='sine',gain=.2,att=.01,delay=0}={}){if(!this.ok())return null;const c=this.ctx,t=c.currentTime+delay,o=c.createOscillator();o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);const g=c.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+att);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.connect(g);g.connect(this.out);o.start(t);o.stop(t+dur+.05);return {o,g}},
+  launch(){this.noise(1.6,{f0:2400,f1:300,type:'bandpass',q:.6,gain:.9,att:.02});this.noise(.5,{f0:300,f1:80,gain:.9});this.tone(.4,{f0:90,f1:40,type:'sawtooth',gain:.25})},
+  whistle(d){return this.tone(d,{f0:1500,f1:420,type:'sine',gain:.05,att:.3})},
+  boom(big){const k=big?1.4:1;this.noise(2.6*k,{f0:1400,f1:60,gain:1,att:.003});this.noise(.25,{f0:5000,f1:800,type:'highpass',gain:.5});this.tone(1.2*k,{f0:80,f1:28,gain:.9,att:.004});for(let i=0;i<6;i++)this.noise(.12,{f0:3000,f1:900,type:'bandpass',gain:.25,delay:.25+Math.random()*1.2})},
+  thud(){this.noise(.9,{f0:600,f1:60,gain:.6});this.tone(.5,{f0:60,f1:30,gain:.5})},
+  correct(){[523,659,784,1047].forEach((f,i)=>this.tone(.35,{f0:f,type:'triangle',gain:.22,delay:i*.09}))},
+  wrong(){this.tone(.55,{f0:180,f1:120,type:'square',gain:.12});this.tone(.55,{f0:186,f1:124,type:'square',gain:.1,delay:.02})},
+  tick(){this.tone(.06,{f0:1200,type:'square',gain:.06})},
+  click(){this.tone(.03,{f0:2200,type:'square',gain:.03})},
+  siren(){for(let i=0;i<3;i++){this.tone(.6,{f0:500,f1:900,type:'sawtooth',gain:.07,delay:i*1.2});this.tone(.6,{f0:900,f1:500,type:'sawtooth',gain:.07,delay:i*1.2+.6})}},
+};
+
+/* ================= World ================= */
+const W=1600,H=900,BASEY=730,G=330;
+const cv=$('cv'),ctx=cv.getContext('2d');
+let scale=1,dpr=1;
+const LAYOUT=[
+  {type:'fuel',x:26,w:64,h:52,hp:50,label:'Fuel Depot',tag:'FUEL'},
+  {type:'hq',x:102,w:118,h:80,hp:120,label:'Command HQ',tag:'HQ'},
+  {type:'radar',x:236,w:50,h:96,hp:60,label:'Radar',tag:'RADAR'},
+  {type:'bunker',x:300,w:86,h:46,hp:90,label:'Bunker',tag:'BUNKER'},
+];
+const LX=[440,1160];
+let S=null;
+let terrain=new Float32Array(W/2+1),mtnFar=[],mtnNear=[],stars=[],clouds=[],scorches=[];
+let parts=[],floats=[],rings=[],missile=null,shake=0,flash=0,tNow=0,lastBoom=0,pending=0,fireworksUntil=0;
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function genWorld(){
+  const px=800+rnd(-70,70),ph=rnd(300,430),w1=rnd(130,190),s1=rnd(-1,1),s2=rnd(-1,1),f=rnd(0,6.28);
+  for(let i=0;i<terrain.length;i++){
+    const x=i*2,g=(c,w)=>Math.exp(-(((x-c)/w)**2));
+    let m=BASEY-ph*g(px,w1)-(100+60*s1)*g(px-250,95)-(100+60*s2)*g(px+250,95)-22*Math.sin(x/53+f)-10*Math.sin(x/19+f*2);
+    const wgt=smooth(480,660,x)*(1-smooth(940,1120,x));
+    terrain[i]=Math.min(BASEY+28,BASEY+(m-BASEY)*wgt);
+  }
+  const mk=(n,base,amp,sm)=>{const a=[],o=rnd(0,9);for(let i=0;i<=n;i++){const x=i/n*W;a.push([x,base-amp*(.5+.5*Math.sin(x/sm+o))*(.6+.4*Math.sin(x/(sm*.37)+o*2))-Math.random()*amp*.15])}return a};
+  mtnFar=mk(70,560,180,170);mtnNear=mk(60,640,140,120);
+  stars=Array.from({length:170},()=>({x:rnd(0,W),y:rnd(0,520),r:rnd(.4,1.6),p:rnd(0,6.28)}));
+  clouds=Array.from({length:7},()=>({x:rnd(-200,W),y:rnd(60,300),s:rnd(.7,1.6)}));
+  scorches=[];
+}
+const ground=x=>{const f=clamp(x,0,W)/2,i=Math.floor(f),t=f-i;return terrain[i]*(1-t)+terrain[Math.min(i+1,terrain.length-1)]*t};
+function inFoundation(x){
+  if(!S)return false;
+  for(const tm of S.teams){for(const s of tm.structs)if(x>=s.x-4&&x<=s.x+s.w+4)return true;if(Math.abs(x-tm.lx)<46)return true}
+  return false;
+}
+function crater(cx,cy,r){
+  for(let x=Math.floor((cx-r)/2)*2;x<=cx+r;x+=2){
+    if(x<0||x>W)continue;const dx=x-cx,dy=Math.sqrt(Math.max(0,r*r-dx*dx)),i=x/2;
+    let top=cy-dy,bot=cy+dy;
+    if(inFoundation(x))bot=Math.min(bot,BASEY+3);
+    if(terrain[i]>=top-2&&terrain[i]<bot)terrain[i]=Math.min(H-14,bot);
+  }
+}
+function makeTeam(i,name,mult){
+  const dir=i===0?1:-1,color=i===0?'#e2483f':'#3a95f0';
+  const structs=LAYOUT.map(L=>{const x=i===0?L.x:W-L.x-L.w,hp=Math.round(L.hp*mult);
+    return {...L,x,y:BASEY,hp,max:hp,dead:false,team:i,seed:Math.random()*1000,
+      cracks:Array.from({length:4},()=>{let px=rnd(.15,.85),py=rnd(.15,.6);const pts=[[px,py]];for(let k=0;k<4;k++){px+=rnd(-.12,.12);py+=rnd(.05,.14);pts.push([px,py])}return pts}),
+      rubble:Array.from({length:9},(_,k)=>[k/8,rnd(.15,.5)])}});
+  return {i,name,color,dir,lx:LX[i],structs,aim:{angle:45,power:70},correct:0,wrong:0,shots:0,hits:0,dmg:0,streak:0,lastImpact:null};
+}
+
+/* ================= Particles ================= */
+function P_(o){parts.push(Object.assign({x:0,y:0,vx:0,vy:0,life:1,max:1,size:4,grow:0,drag:0,g:0,kind:'smoke',col:'#888',rot:0,vr:0,add:false},o));if(parts.length>1600)parts.splice(0,parts.length-1600)}
+function explosion(x,y,big,own){
+  const R=big?1.45:1;
+  Sfx.boom(big);shake=Math.max(shake,(big?30:20));flash=Math.max(flash,big?.55:.4);lastBoom=tNow;
+  rings.push({x,y,r:6,max:150*R,life:.55,t:0});
+  for(let i=0;i<46*R;i++){const a=rnd(0,6.28),sp=rnd(40,330)*R;P_({kind:'fire',x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-60,life:rnd(.35,.9),size:rnd(10,26)*R,drag:3.2,add:true,col:pick(['255,214,120','255,160,60','255,110,40','255,240,190'])})}
+  for(let i=0;i<34*R;i++){const a=rnd(0,6.28),sp=rnd(20,150)*R;P_({kind:'smoke',x:x+rnd(-20,20),y:y+rnd(-15,10),vx:Math.cos(a)*sp,vy:Math.sin(a)*sp*.6-rnd(30,90),life:rnd(1.8,4.2),size:rnd(14,30)*R,grow:rnd(14,30),drag:1.4,col:pick(['38,36,34','52,48,44','70,64,58','28,27,26'])})}
+  for(let i=0;i<32*R;i++){const a=rnd(Math.PI*1.05,Math.PI*1.95),sp=rnd(150,520)*R;P_({kind:'debris',x,y:y-4,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rnd(1.4,3),size:rnd(2,6),g:G*1.6,rot:rnd(0,6),vr:rnd(-12,12),col:pick(['#4a3a28','#5b4630','#2f2a24','#6a5a44','#3c4a2c'])})}
+  for(let i=0;i<40*R;i++){const a=rnd(0,6.28),sp=rnd(250,700);P_({kind:'spark',x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-120,life:rnd(.3,.9),size:rnd(1,2.4),g:G,drag:1.2,add:true,col:'255,220,150'})}
+}
+function smallBlast(x,y){Sfx.thud();shake=Math.max(shake,10);for(let i=0;i<22;i++){const a=rnd(0,6.28),sp=rnd(40,200);P_({kind:'fire',x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,life:rnd(.3,.7),size:rnd(8,18),drag:3,add:true,col:pick(['255,190,90','255,130,50'])})}for(let i=0;i<14;i++)P_({kind:'smoke',x:x+rnd(-15,15),y,vx:rnd(-40,40),vy:rnd(-80,-20),life:rnd(1.5,3),size:rnd(12,22),grow:18,drag:1,col:'40,38,36'})}
+
+/* ================= Damage ================= */
+function distToBox(x,y,s){const top=s.y-s.h,dx=Math.max(s.x-x,0,x-(s.x+s.w)),dy=Math.max(top-y,0,y-s.y);return Math.hypot(dx,dy)}
+function applyBlast(x,y,radius,maxDmg,log){
+  for(const tm of S.teams)for(const s of tm.structs){
+    if(s.dead)continue;const d=distToBox(x,y,s);if(d>=radius)continue;
+    const dmg=Math.max(1,Math.round(maxDmg*Math.pow(1-d/radius,1.15)*rnd(.9,1.1)));
+    s.hp=Math.max(0,s.hp-dmg);
+    const rec=log.get(s)||{s,dmg:0,killed:false};rec.dmg+=dmg;log.set(s,rec);
+    floats.push({x:s.x+s.w/2,y:s.y-s.h-26,text:'−'+dmg,col:tm.i===S.shooter?'#ffb4ae':'#ffe39a',life:1.8,t:0,big:dmg>40});
+    if(s.hp<=0){s.dead=true;rec.killed=true;destroyStruct(s,log)}
+  }
+}
+function destroyStruct(s,log){
+  pending++;
+  const cx=s.x+s.w/2,cy=s.y-s.h/2;
+  setTimeout(()=>{
+    smallBlast(cx,cy);
+    for(let i=0;i<26;i++){const a=rnd(Math.PI*1.1,Math.PI*1.9),sp=rnd(120,420);P_({kind:'debris',x:cx+rnd(-s.w/3,s.w/3),y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rnd(1.5,3),size:rnd(3,8),g:G*1.6,rot:rnd(0,6),vr:rnd(-10,10),col:pick(['#5d6266','#44494d','#6f6a60','#2e3134'])})}
+    floats.push({x:cx,y:s.y-s.h-60,text:s.label.toUpperCase()+' DESTROYED',col:'#fff',life:2.4,t:0,big:true});
+    if(s.type==='fuel'){setTimeout(()=>{explosion(cx,s.y-20,true);applyBlast(cx,s.y-20,130,38,log);crater(cx,s.y,30);pending--},300)}else pending--;
+    lastBoom=tNow;
+  },220);
+}
+
+/* ================= Game flow ================= */
+const el={qwrap:$('qwrap'),qTeam:$('qTeam'),qTopic:$('qTopic'),qPrompt:$('qPrompt'),choices:$('choices'),verdict:$('verdict'),solution:$('solution'),btnSkip:$('btnSkip'),btnSol:$('btnSol'),btnLaunch:$('btnLaunch'),qNote:$('qNote'),qTimer:$('qTimer'),
+  aimbar:$('aimbar'),nextbar:$('nextbar'),banner:$('banner'),bannerH:$('bannerH'),bannerP:$('bannerP'),ang:$('ang'),pow:$('pow'),angV:$('angV'),powV:$('powV'),aimHint:$('aimHint')};
+let bag=[],timerId=null;
+function nextGen(){
+  const en=TOPICS.filter(t=>S.topics.includes(t.id));
+  if(!bag.length){en.forEach(t=>{for(let i=0;i<t.w;i++)bag.push(t)});shuffle(bag);if(bag.length>1&&bag[bag.length-1]===S.lastTopic){const j=ri(0,bag.length-2);[bag[j],bag[bag.length-1]]=[bag[bag.length-1],bag[j]]}}
+  const t=bag.pop();S.lastTopic=t;return pick(t.gens);
+}
+function newGame(cfg){
+  S={teams:[makeTeam(0,cfg.names[0],cfg.len),makeTeam(1,cfg.names[1],cfg.len)],turn:Math.random()<.5?0:1,qnum:0,phase:'question',wind:0,topics:cfg.topics,timer:cfg.timer,cfg,lastTopic:null,shooter:0,heavy:false};
+  bag=[];parts=[];floats=[];rings=[];missile=null;fireworksUntil=0;
+  genWorld();
+  ['team0','team1'].forEach((id,i)=>{$('tn'+i).textContent=S.teams[i].name});
+  $('winwrap').hidden=true;
+  setWind(0);updateHUD();askQuestion();
+}
+function askQuestion(){
+  S.phase='question';S.asker=S.turn;S.qnum++;
+  let q,g=0;do{try{q=nextGen()()}catch(e){console.error(e);q=null}}while((!q||q.answer<0)&&++g<10);
+  S.q=q;S.answered=false;
+  el.aimbar.hidden=true;el.nextbar.hidden=true;el.banner.hidden=true;
+  renderQuestion();updateHUD();
+}
+function renderQuestion(){
+  const q=S.q,tm=S.teams[S.asker];
+  el.qTeam.textContent=tm.name+"'s question";el.qTeam.style.setProperty('--tc',tm.color);
+  el.qTopic.textContent=q.topic+' · Question '+S.qnum;
+  el.qPrompt.innerHTML=q.prompt;
+  el.choices.innerHTML=q.choices.map((c,i)=>`<button class="choice" data-i="${i}"><span class="key">${'ABCD'[i]}</span><span class="ct">${c}</span></button>`).join('');
+  el.verdict.hidden=true;el.solution.hidden=true;el.btnSol.hidden=true;el.btnLaunch.hidden=true;el.btnSkip.hidden=false;el.qNote.hidden=false;
+  el.solution.innerHTML=`<h3>Worked solution</h3><ol>${q.steps.map(s=>`<li>${s}</li>`).join('')}</ol>`;
+  el.qwrap.hidden=false;el.qwrap.scrollTop=0;
+  startTimer();
+}
+function startTimer(){
+  clearInterval(timerId);el.qTimer.hidden=!S.timer;if(!S.timer)return;
+  let left=S.timer;const show=()=>{el.qTimer.textContent=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;el.qTimer.classList.toggle('low',left<=10)};show();
+  timerId=setInterval(()=>{if(S.paused)return;left--;show();if(left<=10&&left>0)Sfx.tick();if(left<=0){clearInterval(timerId);answer(-1)}},1000);
+}
+function answer(i){
+  if(S.phase!=='question'||S.answered)return;
+  S.answered=true;clearInterval(timerId);el.qTimer.classList.remove('low');
+  const q=S.q,asker=S.teams[S.asker],other=S.teams[1-S.asker],ok=i===q.answer;
+  [...el.choices.children].forEach((b,j)=>{b.disabled=true;if(j===q.answer)b.classList.add('right');else if(j===i)b.classList.add('wrong');else b.classList.add('dim')});
+  S.heavy=false;
+  if(ok){asker.correct++;asker.streak++;S.shooter=asker.i;if(asker.streak%3===0)S.heavy=true;Sfx.correct()}
+  else{asker.wrong++;asker.streak=0;S.shooter=other.i;Sfx.wrong()}
+  const sh=S.teams[S.shooter];
+  el.verdict.hidden=false;el.verdict.className='verdict '+(ok?'good':'bad');
+  el.verdict.textContent=ok?(S.heavy?`Correct! Three in a row: ${asker.name} earns a BUNKER BUSTER.`:`Correct! ${asker.name} earns a missile.`):(i<0?`Time's up. ${other.name} steals the missile!`:`Not quite. ${other.name} steals the missile!`);
+  el.btnSkip.hidden=true;el.qNote.hidden=true;el.btnSol.hidden=false;
+  el.solution.hidden=ok;el.btnSol.textContent=ok?'Show worked solution':'Hide worked solution';
+  el.btnLaunch.hidden=false;el.btnLaunch.style.setProperty('--tc',sh.color);el.btnLaunch.textContent=`${sh.name}: to the launcher ▶`;
+  el.btnLaunch.focus({preventScroll:true});
+  updateHUD();
+}
+function setWind(mph){S.wind=mph;const t=$('windTxt'),p=$('windPath');
+  if(mph===0){t.textContent='Calm';p.setAttribute('d','M4 8H38');return}
+  t.textContent=`Wind ${Math.abs(mph)} mph`;p.setAttribute('d',mph>0?'M2 8H38M30 2L38 8L30 14':'M40 8H4M12 2L4 8L12 14');
+}
+function beginAim(){
+  if(S.phase!=='question'||!S.answered)return;
+  el.qwrap.hidden=true;S.phase='aim';
+  const tm=S.teams[S.shooter];
+  const maxW=Math.min(24,6+S.qnum*1.2);setWind(Math.round(rnd(-maxW,maxW)));
+  el.ang.value=tm.aim.angle;el.pow.value=tm.aim.power;syncAim();
+  showBanner(tm.name+(S.heavy?': Bunker Buster ready':': take your shot'),S.shooter===S.asker?'Correct answer. Aim at the enemy base.':'Stolen missile! Aim at the enemy base.',tm.color);
+  el.aimbar.hidden=false;el.nextbar.hidden=true;
+  el.aimHint.textContent=`Drag on the battlefield to aim, or use ← → for angle and ↑ ↓ for power. Space fires.`;
+  updateHUD();
+}
+function showBanner(h,p,col){el.banner.hidden=false;el.banner.style.setProperty('--tc',col||'var(--amber)');el.bannerH.textContent=h;el.bannerP.textContent=p||'';el.banner.classList.remove('pop');void el.banner.offsetWidth;el.banner.classList.add('pop')}
+function syncAim(){const tm=S&&S.teams[S.shooter];if(!tm)return;tm.aim.angle=+el.ang.value;tm.aim.power=+el.pow.value;el.angV.textContent=tm.aim.angle+'°';el.powV.textContent=tm.aim.power}
+function pivot(tm){return {x:tm.lx-tm.dir*12,y:BASEY-30}}
+function railTip(tm){const p=pivot(tm),a=tm.aim.angle*Math.PI/180;return {x:p.x+tm.dir*Math.cos(a)*62,y:p.y-Math.sin(a)*62}}
+const vel=tm=>{const a=tm.aim.angle*Math.PI/180,v=tm.aim.power*7.6;return {vx:tm.dir*Math.cos(a)*v,vy:-Math.sin(a)*v}};
+function fire(){
+  if(S.phase!=='aim')return;
+  const tm=S.teams[S.shooter],t=railTip(tm),v=vel(tm);
+  tm.shots++;S.phase='flight';el.aimbar.hidden=true;el.banner.hidden=true;
+  missile={x:t.x,y:t.y,vx:v.vx,vy:v.vy,t:0,heavy:S.heavy,team:tm.i,trail:[]};
+  Sfx.launch();missile.wh=Sfx.whistle(3.2);
+  shake=Math.max(shake,6);
+  for(let i=0;i<26;i++){const a=Math.atan2(-v.vy,-v.vx)+rnd(-.9,.9),sp=rnd(60,240);P_({kind:'smoke',x:t.x,y:t.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rnd(1,2.4),size:rnd(10,20),grow:24,drag:2,col:'150,146,140'})}
+  for(let i=0;i<14;i++){const a=Math.atan2(-v.vy,-v.vx)+rnd(-.5,.5),sp=rnd(100,300);P_({kind:'fire',x:t.x,y:t.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rnd(.2,.4),size:rnd(8,14),drag:4,add:true,col:'255,190,90'})}
+}
+function impact(x,y,how){
+  const m=missile;missile=null;
+  if(m.wh)try{m.wh.g.gain.cancelScheduledValues(0);m.wh.g.gain.setValueAtTime(0.0001,Sfx.ctx.currentTime);}catch(e){}
+  S.phase='impact';const tm=S.teams[m.team];
+  S.log=new Map();S.offmap=how==='off';
+  if(how!=='off'){
+    explosion(x,y,m.heavy);
+    crater(x,y,m.heavy?56:38);scorches.push({x,y:ground(x),r:m.heavy?95:65});if(scorches.length>40)scorches.shift();
+    applyBlast(x,y,m.heavy?125:88,m.heavy?95:62,S.log);
+    tm.lastImpact={x,y};
+  }else{lastBoom=tNow;tm.lastImpact=null}
+  updateHUD();
+}
+function finishShot(){
+  S.phase='report';const tm=S.teams[S.shooter];
+  let enemy=0,friendly=0,kills=[],top=null;
+  for(const r of S.log.values()){if(r.s.team===tm.i)friendly+=r.dmg;else{enemy+=r.dmg;if(!top||r.dmg>top.dmg)top=r}if(r.killed)kills.push(r.s)}
+  if(enemy>0){tm.hits++;tm.dmg+=enemy}
+  let h,p;
+  if(S.offmap){h='Off the map';p='The missile flew past the battlefield. Adjust the power.'}
+  else if(enemy===0&&friendly===0){h='Miss';p='The missile hit open ground. Check the wind and adjust.'}
+  else if(enemy===0){h='Friendly fire!';p=`${tm.name} damaged its own base (−${friendly}).`}
+  else{const ek=kills.filter(s=>s.team!==tm.i);h=ek.length?`${ek.map(s=>s.label).join(' + ')} destroyed!`:(top.dmg>=45?'Direct hit!':'Hit!');p=`${S.teams[1-tm.i].name} took ${enemy} damage${friendly?`, and ${tm.name} took ${friendly} from friendly fire`:''}.`}
+  showBanner(h,p,tm.color);updateHUD();
+  const dead=S.teams.map(t=>t.structs.every(s=>s.dead));
+  if(dead[0]||dead[1]){const w=dead[0]&&dead[1]?tm.i:(dead[0]?1:0);setTimeout(()=>endGame(w),1600);return}
+  el.nextbar.hidden=false;$('btnNext').focus({preventScroll:true});
+}
+function nextTurn(){if(S.phase!=='report')return;S.turn=1-S.turn;askQuestion()}
+function integrity(tm){const a=tm.structs.reduce((s,x)=>s+x.hp,0),b=tm.structs.reduce((s,x)=>s+x.max,0);return a/b}
+function endGame(w){
+  if(w==null){const a=integrity(S.teams[0]),b=integrity(S.teams[1]);w=a===b?(S.teams[0].correct>=S.teams[1].correct?0:1):(a>b?0:1)}
+  S.phase='over';S.winner=w;clearInterval(timerId);el.qwrap.hidden=true;el.aimbar.hidden=true;el.nextbar.hidden=true;el.banner.hidden=true;
+  const tm=S.teams[w];Sfx.siren();fireworksUntil=tNow+9;
+  $('winPanel').style.setProperty('--tc',tm.color);$('winH').textContent=tm.name+' wins!';
+  const loserDead=S.teams[1-w].structs.every(s=>s.dead);
+  $('winP').textContent=loserDead?`${S.teams[1-w].name}'s base has been destroyed after ${S.qnum} questions.`:`Game ended after ${S.qnum} questions. ${tm.name} has the stronger base.`;
+  const row=(lbl,f)=>`<tr><td>${lbl}</td><td>${f(S.teams[0])}</td><td>${f(S.teams[1])}</td></tr>`;
+  $('winStats').innerHTML=`<tr><th></th><th style="color:${S.teams[0].color}">${esc(S.teams[0].name)}</th><th style="color:${S.teams[1].color}">${esc(S.teams[1].name)}</th></tr>`+
+    row('Questions answered correctly',t=>`${t.correct} of ${t.correct+t.wrong}`)+row('Missiles fired',t=>t.shots)+row('Missiles that hit',t=>t.hits)+row('Damage dealt',t=>t.dmg)+row('Base remaining',t=>Math.round(integrity(t)*100)+'%');
+  setTimeout(()=>{$('winwrap').hidden=false},1200);updateHUD();
+}
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function updateHUD(){
+  if(!S)return;$('qn').textContent=S.qnum;
+  S.teams.forEach((tm,i)=>{
+    const pct=Math.round(integrity(tm)*100);$('tp'+i).textContent=pct+'%';$('tb'+i).style.width=pct+'%';
+    $('pi'+i).innerHTML=tm.structs.map(s=>`<span class="pip ${s.dead?'dead':''}" title="${s.label}: ${s.hp}/${s.max}">${s.tag}</span>`).join('');
+    $('ts'+i).innerHTML=`${tm.correct} correct${tm.streak>=2?` · <span class="streak">${tm.streak} in a row</span>`:''}`;
+    const active=(S.phase==='question'&&S.asker===i)||((S.phase==='aim'||S.phase==='flight')&&S.shooter===i);
+    $('team'+i).classList.toggle('turn',active);
+  });
+}
+
+/* ================= Update ================= */
+function update(dt){
+  if(S&&missile&&S.phase==='flight'&&!S.paused){
+    const m=missile,steps=4,h=dt/steps,wa=S.wind*3.4;
+    for(let k=0;k<steps&&missile;k++){
+      m.vx+=wa*h;m.vy+=G*h;m.x+=m.vx*h;m.y+=m.vy*h;m.t+=h;
+      if(m.x<-80||m.x>W+80||m.y>H+40){impact(m.x,m.y,'off');break}
+      if(m.y>=ground(m.x)){impact(m.x,ground(m.x),'ground');break}
+      let hit=null;if(m.t>.25)for(const tm of S.teams)for(const s of tm.structs)if(!s.dead&&m.x>=s.x&&m.x<=s.x+s.w&&m.y>=s.y-s.h&&m.y<=s.y)hit=s;
+      if(hit){impact(m.x,m.y,'struct');break}
+    }
+    if(missile){const a=Math.atan2(m.vy,m.vx),tx=m.x-Math.cos(a)*14,ty=m.y-Math.sin(a)*14;
+      P_({kind:'smoke',x:tx+rnd(-2,2),y:ty+rnd(-2,2),vx:-m.vx*.05+rnd(-10,10),vy:-m.vy*.05+rnd(-10,10),life:rnd(1.2,2.2),size:rnd(4,7),grow:16,drag:1.5,col:'170,166,160'});
+      P_({kind:'fire',x:tx,y:ty,vx:-m.vx*.15,vy:-m.vy*.15,life:.12,size:rnd(4,8),add:true,col:'255,200,110'});}
+  }
+  if(S&&S.phase==='impact'&&pending===0&&tNow-lastBoom>1.5)finishShot();
+  // burning structures
+  if(S)for(const tm of S.teams)for(const s of tm.structs){
+    const f=s.hp/s.max;
+    if(s.dead){if(Math.random()<dt*6)P_({kind:'smoke',x:s.x+rnd(.2,.8)*s.w,y:s.y-12,vx:rnd(-8,8),vy:rnd(-40,-20),life:rnd(2,4),size:rnd(8,14),grow:16,drag:.5,col:'45,43,41'});
+      if(Math.random()<dt*5)P_({kind:'fire',x:s.x+rnd(.2,.8)*s.w,y:s.y-8,vx:rnd(-5,5),vy:rnd(-40,-15),life:rnd(.3,.6),size:rnd(4,9),add:true,col:'255,140,50'})}
+    else if(f<.6){if(Math.random()<dt*(f<.3?9:3))P_({kind:'smoke',x:s.x+rnd(.25,.75)*s.w,y:s.y-s.h+4,vx:rnd(-6,6),vy:rnd(-45,-25),life:rnd(2,3.5),size:rnd(6,11),grow:14,drag:.5,col:'50,48,46'});
+      if(f<.3&&Math.random()<dt*14)P_({kind:'fire',x:s.x+rnd(.2,.8)*s.w,y:s.y-s.h+6,vx:rnd(-6,6),vy:rnd(-60,-25),life:rnd(.3,.6),size:rnd(5,11),add:true,col:pick(['255,170,70','255,120,40'])})}
+  }
+  // fireworks
+  if(S&&S.phase==='over'&&tNow<fireworksUntil&&Math.random()<dt*3.2){
+    const tm=S.teams[S.winner],cx=rnd(250,W-250),cy=rnd(120,380),col=pick([tm.color==='#e2483f'?'255,110,100':'110,180,255','255,230,160','255,255,255']);
+    Sfx.noise(.6,{f0:2500,f1:400,gain:.2});
+    for(let i=0;i<70;i++){const a=rnd(0,6.28),sp=rnd(80,260);P_({kind:'spark',x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:rnd(.9,1.6),size:rnd(1.4,2.6),g:90,drag:1.2,add:true,col})}
+  }
+  const wa=S?S.wind:0;
+  for(const p of parts){
+    p.life-=dt;const dr=Math.exp(-p.drag*dt);p.vx*=dr;p.vy*=dr;p.vy+=p.g*dt;
+    if(p.kind==='smoke'){p.vx+=wa*2.2*dt;p.vy-=8*dt}
+    p.x+=p.vx*dt;p.y+=p.vy*dt;p.size+=p.grow*dt;p.rot+=p.vr*dt;
+    if(p.kind==='debris'){const gy=ground(p.x);if(p.y>gy){p.y=gy;p.vy*=-.32;p.vx*=.55;p.vr*=.5}}
+  }
+  parts=parts.filter(p=>p.life>0);
+  for(const f of floats){f.t+=dt;f.y-=24*dt}floats=floats.filter(f=>f.t<f.life);
+  for(const r of rings){r.t+=dt}rings=rings.filter(r=>r.t<r.life);
+  for(const c of clouds){c.x+=(6+wa*1.4)*dt*c.s;if(c.x>W+260)c.x=-260;if(c.x<-260)c.x=W+260}
+  shake*=Math.exp(-6*dt);if(shake<.2)shake=0;flash*=Math.exp(-7*dt);
+}
+
+/* ================= Draw ================= */
+function draw(){
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,cv.width,cv.height);
+  const sk=reduced?0:shake;
+  ctx.setTransform(scale,0,0,scale,rnd(-sk,sk)*scale,rnd(-sk,sk)*scale);
+  // sky
+  let g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#05080f');g.addColorStop(.45,'#101b2a');g.addColorStop(.75,'#2a3340');g.addColorStop(1,'#3b3a36');
+  ctx.fillStyle=g;ctx.fillRect(-40,-40,W+80,H+80);
+  for(const s of stars){ctx.globalAlpha=.35+.35*Math.sin(tNow*1.3+s.p);ctx.fillStyle='#e8eef5';ctx.fillRect(s.x,s.y,s.r,s.r)}
+  ctx.globalAlpha=1;
+  // moon
+  g=ctx.createRadialGradient(1250,130,10,1250,130,140);g.addColorStop(0,'rgba(230,236,220,.35)');g.addColorStop(1,'rgba(230,236,220,0)');ctx.fillStyle=g;ctx.fillRect(1100,0,300,300);
+  ctx.fillStyle='#e9ecdf';ctx.beginPath();ctx.arc(1250,130,30,0,7);ctx.fill();ctx.fillStyle='rgba(160,165,150,.35)';ctx.beginPath();ctx.arc(1240,122,7,0,7);ctx.arc(1262,140,5,0,7);ctx.arc(1254,118,3.5,0,7);ctx.fill();
+  // clouds
+  for(const c of clouds){ctx.save();ctx.translate(c.x,c.y);ctx.scale(c.s,c.s*.55);g=ctx.createRadialGradient(0,0,10,0,0,140);g.addColorStop(0,'rgba(120,135,150,.16)');g.addColorStop(1,'rgba(120,135,150,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,140,0,7);ctx.fill();ctx.restore()}
+  // mountains
+  const mtn=(pts,col)=>{ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(0,H);pts.forEach(p=>ctx.lineTo(p[0],p[1]));ctx.lineTo(W,H);ctx.fill()};
+  mtn(mtnFar,'#141d26');mtn(mtnNear,'#1a242b');
+  // searchlights
+  if(S){ctx.save();ctx.globalCompositeOperation='lighter';S.teams.forEach((tm,i)=>{const hq=tm.structs[1];if(hq.dead)return;const bx=hq.x+hq.w/2,by=hq.y-hq.h,a=-Math.PI/2+Math.sin(tNow*.35+i*2)*.55;
+    const L=900,sp=.06,x1=bx+Math.cos(a-sp)*L,y1=by+Math.sin(a-sp)*L,x2=bx+Math.cos(a+sp)*L,y2=by+Math.sin(a+sp)*L;
+    const lg=ctx.createLinearGradient(bx,by,bx+Math.cos(a)*L,by+Math.sin(a)*L);lg.addColorStop(0,'rgba(220,230,210,.13)');lg.addColorStop(1,'rgba(220,230,210,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(x1,y1);ctx.lineTo(x2,y2);ctx.fill()});ctx.restore()}
+  // terrain
+  ctx.beginPath();ctx.moveTo(-40,H+40);ctx.lineTo(-40,terrain[0]);for(let i=0;i<terrain.length;i++)ctx.lineTo(i*2,terrain[i]);ctx.lineTo(W+40,terrain[terrain.length-1]);ctx.lineTo(W+40,H+40);ctx.closePath();
+  ctx.save();g=ctx.createLinearGradient(0,380,0,H);g.addColorStop(0,'#3a3d2a');g.addColorStop(.4,'#33301f');g.addColorStop(1,'#1d1a13');ctx.fillStyle=g;ctx.fill();ctx.clip();
+  ctx.globalAlpha=.18;ctx.strokeStyle='#000';ctx.lineWidth=2;for(let y=420;y<H;y+=26){ctx.beginPath();for(let x=0;x<=W;x+=40)ctx.lineTo(x,y+Math.sin(x/90+y)*6);ctx.stroke()}ctx.globalAlpha=1;
+  for(const s of scorches){g=ctx.createRadialGradient(s.x,s.y,4,s.x,s.y,s.r);g.addColorStop(0,'rgba(8,6,4,.75)');g.addColorStop(1,'rgba(8,6,4,0)');ctx.fillStyle=g;ctx.fillRect(s.x-s.r,s.y-s.r,s.r*2,s.r*2)}
+  ctx.restore();
+  ctx.strokeStyle='#4f5a33';ctx.lineWidth=4;ctx.beginPath();for(let i=0;i<terrain.length;i++)ctx.lineTo(i*2,terrain[i]+1);ctx.stroke();
+  ctx.strokeStyle='rgba(150,165,110,.35)';ctx.lineWidth=1.2;ctx.beginPath();for(let i=0;i<terrain.length;i++)ctx.lineTo(i*2,terrain[i]-.5);ctx.stroke();
+  if(S){
+    for(const tm of S.teams){for(const s of tm.structs)drawStruct(s,tm);drawLauncher(tm)}
+    for(const tm of S.teams)if(tm.lastImpact&&(S.phase==='aim'&&S.shooter===tm.i)){const p=tm.lastImpact;ctx.strokeStyle=tm.color;ctx.lineWidth=2.5;ctx.globalAlpha=.85;ctx.beginPath();ctx.moveTo(p.x-9,p.y-9);ctx.lineTo(p.x+9,p.y+9);ctx.moveTo(p.x+9,p.y-9);ctx.lineTo(p.x-9,p.y+9);ctx.stroke();ctx.font='600 13px "Chakra Petch",sans-serif';ctx.fillStyle=tm.color;ctx.textAlign='center';ctx.fillText('last shot',p.x,p.y-16);ctx.globalAlpha=1}
+    if(S.phase==='aim')drawAimGuide(S.teams[S.shooter]);
+  }
+  // particles (normal)
+  for(const p of parts){if(p.add)continue;const a=clamp(p.life/(p.max||1),0,1);
+    if(p.kind==='smoke'){ctx.fillStyle=`rgba(${p.col},${Math.min(.55,p.life*.25)})`;ctx.beginPath();ctx.arc(p.x,p.y,p.size,0,7);ctx.fill()}
+    else if(p.kind==='debris'){ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.globalAlpha=Math.min(1,p.life*1.5);ctx.fillStyle=p.col;ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*.7);ctx.restore()}
+  }
+  if(missile)drawMissile(missile);
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  for(const p of parts){if(!p.add)continue;const a=clamp(p.life*2.2,0,1);
+    if(p.kind==='spark'){ctx.strokeStyle=`rgba(${p.col},${a})`;ctx.lineWidth=p.size;ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x-p.vx*.025,p.y-p.vy*.025);ctx.stroke()}
+    else{const r=Math.max(1,p.size*(.5+a*.6));const rg=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r);rg.addColorStop(0,`rgba(${p.col},${a*.9})`);rg.addColorStop(1,`rgba(${p.col},0)`);ctx.fillStyle=rg;ctx.fillRect(p.x-r,p.y-r,r*2,r*2)}}
+  for(const r of rings){const k=r.t/r.life,rad=r.r+(r.max-r.r)*(1-Math.pow(1-k,3));ctx.strokeStyle=`rgba(255,230,190,${(1-k)*.5})`;ctx.lineWidth=6*(1-k)+1;ctx.beginPath();ctx.arc(r.x,r.y,rad,0,7);ctx.stroke()}
+  ctx.restore();
+  // floats
+  ctx.textAlign='center';
+  for(const f of floats){const a=clamp(Math.min(f.t*5,(f.life-f.t)*2),0,1);ctx.globalAlpha=a;ctx.font=`700 ${f.big?30:24}px "Chakra Petch",sans-serif`;ctx.lineWidth=5;ctx.strokeStyle='rgba(0,0,0,.8)';ctx.strokeText(f.text,f.x,f.y);ctx.fillStyle=f.col;ctx.fillText(f.text,f.x,f.y)}
+  ctx.globalAlpha=1;
+  // off-screen missile marker
+  if(missile&&missile.y<0){const x=clamp(missile.x,20,W-20);ctx.fillStyle='#f2b33d';ctx.beginPath();ctx.moveTo(x,6);ctx.lineTo(x-10,24);ctx.lineTo(x+10,24);ctx.fill();ctx.font='600 14px "Chakra Petch",sans-serif';ctx.fillText(Math.round(-missile.y+BASEY)+' ft up',x,42)}
+  if(flash>.01){ctx.fillStyle=`rgba(255,240,215,${flash*.5})`;ctx.fillRect(-40,-40,W+80,H+80)}
+}
+function drawAimGuide(tm){
+  const t=railTip(tm),v=vel(tm);let x=t.x,y=t.y,vx=v.vx,vy=v.vy;
+  ctx.fillStyle=tm.color;
+  for(let i=1;i<=26;i++){const h=.022;vy+=G*h;x+=vx*h;y+=vy*h;if(i%2===0){ctx.globalAlpha=1-i/28;ctx.beginPath();ctx.arc(x,y,3.2,0,7);ctx.fill()}}
+  ctx.globalAlpha=1;
+}
+function drawMissile(m){
+  const a=Math.atan2(m.vy,m.vx),k=m.heavy?1.4:1;ctx.save();ctx.translate(m.x,m.y);ctx.rotate(a);ctx.scale(k,k);
+  const fl=rnd(.8,1.25);g=ctx.createRadialGradient(-16,0,0,-16,0,18*fl);g.addColorStop(0,'rgba(255,250,220,1)');g.addColorStop(.3,'rgba(255,190,80,.9)');g.addColorStop(1,'rgba(255,90,20,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(-22,0,16*fl,6,0,0,7);ctx.fill();
+  ctx.fillStyle='#cfd4d1';ctx.fillRect(-14,-3.5,24,7);
+  ctx.fillStyle=S.teams[m.team].color;ctx.beginPath();ctx.moveTo(10,-3.5);ctx.lineTo(19,0);ctx.lineTo(10,3.5);ctx.fill();
+  ctx.fillStyle='#7d8582';ctx.beginPath();ctx.moveTo(-14,-3.5);ctx.lineTo(-19,-8);ctx.lineTo(-9,-3.5);ctx.moveTo(-14,3.5);ctx.lineTo(-19,8);ctx.lineTo(-9,3.5);ctx.fill();
+  ctx.restore();
+}
+var g;
+function drawLauncher(tm){
+  const x=tm.lx,y=BASEY,d=tm.dir,p=pivot(tm),a=tm.aim.angle*Math.PI/180;
+  // sandbag berm
+  // chassis
+  ctx.fillStyle='#2f3a2c';ctx.fillRect(x-38,y-22,76,12);
+  ctx.fillStyle='#3a4836';ctx.beginPath();ctx.moveTo(x+d*24,y-22);ctx.lineTo(x+d*42,y-22);ctx.lineTo(x+d*46,y-10);ctx.lineTo(x+d*24,y-10);ctx.fill();
+  ctx.fillStyle='#8fb3c7';ctx.globalAlpha=.6;ctx.fillRect(Math.min(x+d*30,x+d*40),y-20,8,5);ctx.globalAlpha=1;
+  ctx.fillStyle=tm.color;ctx.fillRect(x-30,y-17,40,3);
+  ctx.fillStyle='#151a17';for(const wx of [-26,-6,30]){ctx.beginPath();ctx.arc(x+d*wx,y-6,7,0,7);ctx.fill()}
+  ctx.fillStyle='#55605a';for(const wx of [-26,-6,30]){ctx.beginPath();ctx.arc(x+d*wx,y-6,2.5,0,7);ctx.fill()}
+  // rail
+  ctx.save();ctx.translate(p.x,p.y);ctx.scale(d,1);ctx.rotate(-a);
+  ctx.fillStyle='#46523f';ctx.fillRect(-12,-5,74,10);ctx.fillStyle='#2a3227';ctx.fillRect(-12,3,74,3);
+  const loaded=!(missile&&missile.team===tm.i)&&!(S.phase==='impact'&&S.shooter===tm.i);
+  if(loaded){ctx.fillStyle='#cfd4d1';ctx.fillRect(-4,-11,56,7);ctx.fillStyle=tm.color;ctx.beginPath();ctx.moveTo(52,-11);ctx.lineTo(64,-7.5);ctx.lineTo(52,-4);ctx.fill()}
+  ctx.restore();
+  ctx.fillStyle='#2f3a2c';ctx.beginPath();ctx.arc(p.x,p.y,7,0,7);ctx.fill();
+  if(S.phase==='aim'&&S.shooter===tm.i){ctx.strokeStyle=tm.color;ctx.globalAlpha=.5+.5*Math.sin(tNow*6);ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y-14,52,Math.PI*1.05,Math.PI*1.95);ctx.stroke();ctx.globalAlpha=1}
+}
+function drawStruct(s,tm){
+  const {x,w,h}=s,y=s.y,top=y-h,f=s.hp/s.max;
+  if(s.dead){
+    ctx.fillStyle='#2c2c2a';ctx.beginPath();ctx.moveTo(x-6,y);s.rubble.forEach(([px,py])=>ctx.lineTo(x+px*w,y-py*Math.min(h,40)));ctx.lineTo(x+w+6,y);ctx.fill();
+    ctx.strokeStyle='#4a4846';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x+w*.2,y-6);ctx.lineTo(x+w*.35,y-28);ctx.moveTo(x+w*.7,y-4);ctx.lineTo(x+w*.6,y-24);ctx.stroke();
+    return;
+  }
+  ctx.save();
+  if(s.type==='hq'){
+    ctx.fillStyle='#4b5357';ctx.fillRect(x,top,w,h);ctx.fillStyle='#3a4145';ctx.fillRect(x-4,top-7,w+8,8);
+    for(let r=0;r<2;r++)for(let c=0;c<4;c++){const on=Math.sin(s.seed+r*7+c*3+Math.floor(tNow*.5+(r+c)*.3))>-.3;ctx.fillStyle=on?'#f2c76a':'#1e2427';ctx.fillRect(x+10+c*26,top+12+r*24,16,12)}
+    ctx.fillStyle='#22282b';ctx.fillRect(x+w/2-9,y-20,18,20);
+    ctx.fillStyle=tm.color;ctx.fillRect(x,top+h*.62,w,4);
+    // antenna + flag
+    const fx=x+w*(tm.dir>0?.82:.18);ctx.strokeStyle='#8a9290';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(fx,top-7);ctx.lineTo(fx,top-52);ctx.stroke();
+    const wd=S.wind>=0?1:-1,wv=clamp(Math.abs(S.wind)/20,.25,1);ctx.fillStyle=tm.color;ctx.beginPath();ctx.moveTo(fx,top-52);
+    for(let i=0;i<=8;i++){const t=i/8;ctx.lineTo(fx+wd*t*30*wv+wd*2,top-52+Math.sin(tNow*6+t*5)*3*t+t*(1-wv)*12)}
+    for(let i=8;i>=0;i--){const t=i/8;ctx.lineTo(fx+wd*t*30*wv+wd*2,top-38+Math.sin(tNow*6+t*5)*3*t+t*(1-wv)*12)}
+    ctx.fill();
+  }else if(s.type==='radar'){
+    ctx.strokeStyle='#6c7472';ctx.lineWidth=2.5;const cx=x+w/2;ctx.beginPath();ctx.moveTo(x+4,y);ctx.lineTo(cx,top+30);ctx.lineTo(x+w-4,y);
+    for(let i=1;i<4;i++){const yy=y-(y-top-30)*i/4,hw=(w/2-4)*(1-i/4);ctx.moveTo(cx-hw,yy);ctx.lineTo(cx+hw,yy)}ctx.moveTo(x+4,y);ctx.lineTo(cx+(w/2-4)*.5,y-(y-top-30)*.5);ctx.moveTo(x+w-4,y);ctx.lineTo(cx-(w/2-4)*.5,y-(y-top-30)*.5);ctx.stroke();
+    const sp=Math.cos(tNow*(f<.35?.7:1.8)+s.seed);ctx.fillStyle='#b8bfbc';ctx.beginPath();ctx.ellipse(cx,top+18,Math.max(2,Math.abs(sp)*28),16,0,0,7);ctx.fill();
+    ctx.fillStyle='#7d8582';ctx.beginPath();ctx.ellipse(cx+sp*3,top+18,Math.max(1,Math.abs(sp)*18),9,0,0,7);ctx.fill();
+    if(Math.sin(tNow*3+s.seed)>.6){ctx.fillStyle=tm.color;ctx.beginPath();ctx.arc(cx,top+2,3.5,0,7);ctx.fill()}
+  }else if(s.type==='bunker'){
+    for(let i=0;i<4;i++){ctx.fillStyle=i%2?'#6b6248':'#5d553e';ctx.beginPath();ctx.ellipse(x-4+i*6,y-5-i*0,8,6,0,0,7);ctx.ellipse(x+w+4-i*6,y-5,8,6,0,0,7);ctx.fill()}
+    ctx.fillStyle='#596056';ctx.beginPath();ctx.ellipse(x+w/2,y,w/2,h,0,Math.PI,0);ctx.fill();
+    ctx.fillStyle='#4a5048';ctx.beginPath();ctx.ellipse(x+w/2-10,y-h*.6,14,6,-.3,0,7);ctx.ellipse(x+w/2+14,y-h*.35,12,5,.2,0,7);ctx.fill();
+    ctx.fillStyle='#111';ctx.fillRect(x+w/2-16,y-h*.5,32,6);
+    ctx.fillStyle=tm.color;ctx.fillRect(x+w/2-4,top+4,8,3);
+  }else if(s.type==='fuel'){
+    for(const [ox,tw,th] of [[0,28,h],[32,30,h-10]]){const tx=x+ox,tt=y-th;ctx.fillStyle='#8f9693';ctx.fillRect(tx,tt+5,tw,th-5);ctx.beginPath();ctx.ellipse(tx+tw/2,tt+5,tw/2,5,0,0,7);ctx.fillStyle='#a9afac';ctx.fill();
+      ctx.fillStyle='#d6a21e';ctx.fillRect(tx,tt+14,tw,5);ctx.fillStyle='#1d1f1e';ctx.font='700 9px "Chakra Petch",sans-serif';ctx.textAlign='center';ctx.fillText('FUEL',tx+tw/2,tt+30)}
+    ctx.strokeStyle='#5b615e';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x+14,y-6);ctx.lineTo(x+46,y-6);ctx.stroke();
+  }
+  // damage
+  if(f<.65){ctx.strokeStyle='rgba(15,15,15,.75)';ctx.lineWidth=1.6;for(const c of s.cracks){ctx.beginPath();c.forEach(([px,py],i)=>i?ctx.lineTo(x+px*w,top+py*h):ctx.moveTo(x+px*w,top+py*h));ctx.stroke()}
+    const rg=ctx.createRadialGradient(x+w*.6,top+h*.3,2,x+w*.6,top+h*.3,w*.5);rg.addColorStop(0,'rgba(10,8,6,.6)');rg.addColorStop(1,'rgba(10,8,6,0)');ctx.fillStyle=rg;ctx.fillRect(x,top,w,h)}
+  ctx.restore();
+  // hp bar
+  const bw=Math.max(40,w*.8),bx=x+w/2-bw/2,by=top-(s.type==='hq'?62:14);
+  ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(bx-1,by-1,bw+2,6);ctx.fillStyle=f>.6?'#5fd08f':f>.3?'#f2b33d':'#e5534b';ctx.fillRect(bx,by,bw*f,4);
+}
+
+/* ================= Loop ================= */
+let last=performance.now();
+function frame(ts){const dt=Math.min(.033,(ts-last)/1000);last=ts;tNow+=dt;if(!(S&&S.paused))update(dt);draw();requestAnimationFrame(frame)}
+function fit(){
+  const r=$('stagewrap').getBoundingClientRect();let w=r.width,h=w*9/16;if(h>r.height){h=r.height;w=h*16/9}
+  w=Math.max(200,Math.floor(w));h=Math.floor(w*9/16);
+  const st=$('stage');st.style.width=w+'px';st.style.height=h+'px';
+  dpr=Math.min(2,window.devicePixelRatio||1);cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);scale=cv.width/W;
+}
+addEventListener('resize',fit);
+try{new ResizeObserver(fit).observe($('stagewrap'))}catch(e){}
+
+/* ================= Input ================= */
+el.choices.addEventListener('click',e=>{const b=e.target.closest('.choice');if(b)answer(+b.dataset.i)});
+el.btnSkip.onclick=()=>{S.qnum--;askQuestion()};
+el.btnSol.onclick=()=>{el.solution.hidden=!el.solution.hidden;el.btnSol.textContent=el.solution.hidden?'Show worked solution':'Hide worked solution'};
+el.btnLaunch.onclick=()=>{Sfx.click();beginAim()};
+el.ang.oninput=el.pow.oninput=syncAim;
+$('btnFire').onclick=fire;
+$('btnNext').onclick=nextTurn;
+let dragging=false;
+function aimFromPointer(e){
+  if(!S||S.phase!=='aim')return;const r=cv.getBoundingClientRect(),wx=(e.clientX-r.left)/r.width*W,wy=(e.clientY-r.top)/r.height*H,tm=S.teams[S.shooter],p=pivot(tm);
+  const dx=(wx-p.x)*tm.dir,dy=p.y-wy;if(dx<=0&&dy<=0)return;
+  const ang=Math.round(clamp(Math.atan2(dy,Math.max(dx,0.01))*180/Math.PI,5,85)),pw=Math.round(clamp(Math.hypot(dx,dy)/5,10,100));
+  el.ang.value=ang;el.pow.value=pw;syncAim();
+}
+cv.addEventListener('pointerdown',e=>{if(S&&S.phase==='aim'){dragging=true;cv.setPointerCapture(e.pointerId);aimFromPointer(e)}});
+cv.addEventListener('pointermove',e=>{if(dragging)aimFromPointer(e)});
+cv.addEventListener('pointerup',()=>{dragging=false});
+addEventListener('keydown',e=>{
+  if(!S||S.paused||e.target.tagName==='INPUT'&&e.target.type==='text')return;
+  if(S.phase==='question'&&!S.answered){const k='abcd'.indexOf(e.key.toLowerCase()),d='1234'.indexOf(e.key);const i=k>=0?k:d;if(i>=0&&i<S.q.choices.length){answer(i);e.preventDefault()}return}
+  if(S.phase==='question'&&S.answered&&e.key==='Enter'&&document.activeElement!==el.btnSol){e.preventDefault();beginAim();return}
+  if(S.phase==='aim'){
+    const st=e.shiftKey?5:1;
+    if(e.key==='ArrowLeft'||e.key==='ArrowRight'){const toward=(e.key==='ArrowRight')===(S.teams[S.shooter].dir>0);el.ang.value=+el.ang.value+(toward?-st:st);syncAim();e.preventDefault()}
+    else if(e.key==='ArrowUp'){el.pow.value=+el.pow.value+st;syncAim();e.preventDefault()}
+    else if(e.key==='ArrowDown'){el.pow.value=+el.pow.value-st;syncAim();e.preventDefault()}
+    else if(e.key===' '||e.key==='Enter'){if(e.target.tagName!=='BUTTON'||e.key===' '){e.preventDefault();fire()}}
+    return;
+  }
+  if(S.phase==='report'&&e.key==='Enter'&&e.target!==$('btnNext')){e.preventDefault();nextTurn()}
+});
+
+// sound / fullscreen / menu
+$('btnSound').onclick=()=>{Sfx.on=!Sfx.on;$('btnSound').textContent=Sfx.on?'Sound on':'Sound off';$('btnSound').setAttribute('aria-pressed',Sfx.on);save()};
+$('btnFull').onclick=()=>{try{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>{})}catch(e){}};
+$('btnMenu').onclick=()=>{if(!S||S.phase==='over')return;S.paused=true;$('menu').hidden=false};
+$('mResume').onclick=()=>{S.paused=false;$('menu').hidden=true};
+$('mEnd').onclick=()=>{$('menu').hidden=true;S.paused=false;if(missile){missile=null}endGame(null)};
+$('mNew').onclick=()=>{$('menu').hidden=true;if(S)S.paused=false;clearInterval(timerId);el.qwrap.hidden=true;$('setup').hidden=false};
+$('wRematch').onclick=()=>{newGame(S.cfg)};
+$('wNew').onclick=()=>{$('winwrap').hidden=true;$('setup').hidden=false};
+
+// setup
+$('topicBoxes').innerHTML=TOPICS.map(t=>`<label><input type="checkbox" value="${t.id}" checked>${t.label}</label>`).join('');
+function save(){try{localStorage.setItem('systemsStrike',JSON.stringify({n0:$('n0').value,n1:$('n1').value,len:document.querySelector('input[name=len]:checked').value,timer:$('timerSel').value,topics:[...document.querySelectorAll('#topicBoxes input:checked')].map(x=>x.value),sound:Sfx.on}))}catch(e){}}
+(function load(){try{const d=JSON.parse(localStorage.getItem('systemsStrike')||'null');if(!d)return;$('n0').value=d.n0||'Red Team';$('n1').value=d.n1||'Blue Team';
+  const r=document.querySelector(`input[name=len][value="${d.len}"]`);if(r)r.checked=true;$('timerSel').value=d.timer||'0';
+  if(Array.isArray(d.topics))document.querySelectorAll('#topicBoxes input').forEach(x=>x.checked=d.topics.includes(x.value));
+  if(d.sound===false){Sfx.on=false;$('btnSound').textContent='Sound off';$('btnSound').setAttribute('aria-pressed','false')}}catch(e){}})();
+$('setupForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  const topics=[...document.querySelectorAll('#topicBoxes input:checked')].map(x=>x.value);
+  if(!topics.length){$('setupErr').textContent='Pick at least one question type.';return}
+  $('setupErr').textContent='';Sfx.init();save();
+  const cfg={names:[$('n0').value.trim()||'Red Team',$('n1').value.trim()||'Blue Team'],len:+document.querySelector('input[name=len]:checked').value,timer:+$('timerSel').value,topics};
+  $('setup').hidden=true;newGame(cfg);
+});
+
+// boot: show a live battlefield behind the setup screen
+fit();
+S={teams:[makeTeam(0,'Red Team',1),makeTeam(1,'Blue Team',1)],phase:'setup',wind:6,qnum:0,shooter:0,asker:0};
+genWorld();setWind(6);updateHUD();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
