@@ -700,7 +700,7 @@ function nextGen(){
   const t=bag.pop();S.lastTopic=t;return pick(t.gens);
 }
 function newGame(cfg){
-  S={teams:[makeTeam(0,cfg.names[0],cfg.len),makeTeam(1,cfg.names[1],cfg.len)],turn:Math.random()<.5?0:1,qnum:0,phase:'question',wind:0,topics:cfg.topics,timer:cfg.timer,cfg,lastTopic:null,shooter:0,heavy:false};
+  S={teams:[makeTeam(0,cfg.names[0],cfg.len),makeTeam(1,cfg.names[1],cfg.len)],turn:Math.random()<.5?0:1,qnum:0,phase:'question',wind:0,topics:cfg.topics,timer:cfg.timer,cfg,lastTopic:null,shooter:0,heavy:false,seen:new Set()};
   bag=[];parts=[];floats=[];rings=[];missile=null;fireworksUntil=0;
   genWorld();
   ['team0','team1'].forEach((id,i)=>{$('tn'+i).textContent=S.teams[i].name});
@@ -709,7 +709,10 @@ function newGame(cfg){
 }
 function askQuestion(){
   S.phase='question';S.asker=S.turn;S.qnum++;
-  let q,g=0;do{try{q=nextGen()()}catch(e){console.error(e);q=null}}while((!q||q.answer<0)&&++g<10);
+  // never show the exact same question twice in one game (graph clip ids are stripped so identical graphs match)
+  const key=q=>q.prompt.replace(/gc\d+/g,'');
+  let q,g=0;do{try{q=nextGen()()}catch(e){console.error(e);q=null}}while((!q||q.answer<0||S.seen.has(key(q)))&&++g<60);
+  S.seen.add(key(q));
   S.q=q;S.answered=false;
   el.aimbar.hidden=true;el.nextbar.hidden=true;el.banner.hidden=true;
   renderQuestion();updateHUD();
